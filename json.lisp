@@ -27,12 +27,6 @@
 
 (in-package :json)
 
-(define-condition json-parse-error (lex-error)
-  ()
-  (:documentation "Signaled from the JSON parser on a parse error."))
-
-(defvar *lexer*)
-
 (deflexer string-lexer ()
   ("\\n"            #\newline)
   ("\\t"            #\tab)
@@ -79,7 +73,7 @@
 
   ;; unparsable value
   ((value :error)
-   (error (make-condition 'json-parse-error :lexer *lexer*)))
+   (error "JSON error"))
  
   ;; objects
   ((object :object :end-object) ())
@@ -103,5 +97,8 @@
 
 (defun json-decode (string &optional source)
   "Convert a JSON string into a Lisp object."
-  (let ((*lexer* (json-lexer string source)))
-    (json-parser (lex-next-token *lexer*))))
+  (let ((lexer (json-lexer string source)))
+    (handler-case
+        (json-parser (lex-next-token lexer))
+      (condition (err)
+        (error (make-condition 'lex-error :reason err :lexer lexer))))))
