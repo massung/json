@@ -28,19 +28,19 @@
 (in-package :json)
 
 (deflexer string-lexer ()
-  ("\\n"            #\newline)
-  ("\\t"            #\tab)
-  ("\\f"            #\formfeed)
-  ("\\b"            #\backspace)
-  ("\\r"            #\return)
-  ("\\u(%x%x%x%x)"  (code-char (parse-integer $1 :radix 16)))
-  ("\\."            (char $$ 1))
-  ("."              (char $$ 0)))
+  ("\""             (values nil t))
+  ("\\n"            (values :char #\newline))
+  ("\\t"            (values :char #\tab))
+  ("\\f"            (values :char #\formfeed))
+  ("\\b"            (values :char #\backspace))
+  ("\\r"            (values :char #\return))
+  ("\\u(%x%x%x%x)"  (values :char (code-char (parse-integer $1 :radix 16))))
+  ("\\."            (values :char (char $$ 1)))
+  ("."              (values :char (char $$ 0))))
 
-(defun unescape-string (s)
-  "Common Lisp doesn't unescape strings... so here's how we can do it!"
-  (let ((cs (parse 'string-lexer s)))
-    (format nil "~{~c~}" (mapcar #'token-class cs))))
+(defun parse-json-string ()
+  "Join a list of characters together to create a string."
+  (map 'lw:text-string #'token-value (tokenize #'string-lexer)))
 
 (deflexer json-lexer (:multi-line t)
   ("[%s%n]+")
@@ -50,15 +50,14 @@
   ("%]"                               :end-array)
   (":"                                :colon)
   (","                                :comma)
-  ("\"((?\\(?u%x%x%x%x|.)|[^\"])*)\"" (values :string (unescape-string $1)))
+  ("\""                               (values :string (parse-json-string)))
   ("[+-]?%d+%.%d+(?[eE][+-]?%d+)?"    (values :float (parse-float $$)))
   ("[+-]?%d+(?[eE][+-]?%d+)?"         (values :int (truncate (parse-float $$))))
   ("%a%w*"                            (cond
-                                       ((string= $$ "true") (values :const t))
-                                       ((string= $$ "false") (values :const nil))
+                                       ((string= $$ "true") (values :const :true))
+                                       ((string= $$ "false") (values :const :false))
                                        ((string= $$ "null") (values :const :null))
-                                       (t
-                                        (values :id $$)))))
+                                       (t :unknown-identifier))))
 
 (defparser json-parser
   ((start value) $1)
@@ -71,9 +70,11 @@
   ((value array) (coerce $1 'vector))
   ((value object) $1)
 
-  ;; unparsable value
+  ;; unparsable values
+  ((value :unknown-identifier)
+   (error "Unknown JSON identifier"))
   ((value :error)
-   (error "JSON error"))
+   (error "JSON syntax error"))
  
   ;; objects
   ((object :object :end-object) ())
@@ -97,8 +98,5 @@
 
 (defun json-decode (string &optional source)
   "Convert a JSON string into a Lisp object."
-  (let ((lexer (json-lexer string source)))
-    (handler-case
-        (json-parser (lex-next-token lexer))
-      (condition (err)
-        (error (make-condition 'lex-error :reason err :lexer lexer))))))
+  (with-lexbuf (string source)
+    (json-parser #'json-lexer)))
