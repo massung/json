@@ -27,20 +27,31 @@
 
 (in-package :json)
 
-(deflexer string-lexer ()
+(deflexer json-string (:multi-line t)
   ("\""             (values nil t))
-  ("\\n"            (values :char #\newline))
-  ("\\t"            (values :char #\tab))
-  ("\\f"            (values :char #\formfeed))
-  ("\\b"            (values :char #\backspace))
-  ("\\r"            (values :char #\return))
-  ("\\u(%x%x%x%x)"  (values :char (code-char (parse-integer $1 :radix 16))))
-  ("\\."            (values :char (char $$ 1)))
-  ("."              (values :char (char $$ 0))))
+
+  ;; error if the string doesn't terminate properly
+  ("$"              (error "Unterminated string"))
+
+  ;; escaped characters
+  ("\\n"            #\newline)
+  ("\\t"            #\tab)
+  ("\\f"            #\formfeed)
+  ("\\b"            #\backspace)
+  ("\\r"            #\return)
+
+  ;; unicode characters
+  ("\\u(%x%x%x%x)"  (let ((n (parse-integer $1 :radix 16)))
+                      (code-char n)))
+
+  ;; all other characters
+  ("\\."            (char $$ 1))
+  ("."              (char $$ 0)))
 
 (defun parse-json-string ()
   "Join a list of characters together to create a string."
-  (map 'lw:text-string #'token-value (tokenize #'string-lexer)))
+  (let ((cs (loop :for c := (json-string) :while c :collect c)))
+    (coerce cs 'lw:text-string)))
 
 (deflexer json-lexer (:multi-line t)
   ("[%s%n]+")
@@ -63,12 +74,13 @@
   ((start value) $1)
   
   ;; single json value
-  ((value :const) (token-value $1))
-  ((value :string) (token-value $1))
-  ((value :float) (token-value $1))
-  ((value :int) (token-value $1))
-  ((value array) (coerce $1 'vector))
+  ((value :const) $1)
+  ((value :string) $1)
+  ((value :float) $1)
+  ((value :int) $1)
   ((value object) $1)
+  ((value array)
+   (coerce $1 'vector))
 
   ;; unparsable values
   ((value :unknown-identifier)
@@ -82,9 +94,9 @@
 
   ;; members of an object
   ((members :string :colon value :comma members)
-   `((,(token-value $1) . ,$3) ,@$5))
+   `((,$1 . ,$3) ,@$5))
   ((members :string :colon value :end-object)
-   `((,(token-value $1) . ,$3)))
+   `((,$1 . ,$3)))
   
   ;; arrays
   ((array :array :end-array) ())
