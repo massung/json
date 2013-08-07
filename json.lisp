@@ -27,76 +27,89 @@
 
 (in-package :json)
 
-(deflexer json-string (:multi-line t)
-  ("\""             (values nil t))
-
-  ;; error if the string doesn't terminate properly
-  ("$"              (error "Unterminated string"))
-
-  ;; escaped characters
-  ("\\n"            #\newline)
-  ("\\t"            #\tab)
-  ("\\f"            #\formfeed)
-  ("\\b"            #\backspace)
-  ("\\r"            #\return)
-
-  ;; unicode characters
-  ("\\u(%x%x%x%x)"  (let ((n (parse-integer $1 :radix 16)))
-                      (code-char n)))
-
-  ;; all other characters
-  ("\\."            (char $$ 1))
-  ("."              (char $$ 0)))
-
-(defun parse-json-string ()
-  "Join a list of characters together to create a string."
-  (let ((cs (loop :for c := (json-string) :while c :collect c)))
-    (coerce cs 'lw:text-string)))
-
 (deflexer json-lexer (:multi-line t)
-  ("[%s%n]+")
+  ("[%s%n]+"                          :next-token)
   ("{"                                :object)
   ("}"                                :end-object)
   ("%["                               :array)
   ("%]"                               :end-array)
   (":"                                :colon)
   (","                                :comma)
-  ("\""                               (values :string (parse-json-string)))
+
+  ;; strings use a different lexer
+  ("\""                               (prog1
+                                          :quote
+                                        (setf *lexer* #'string-lexer)))
+
+  ;; numbers
   ("[+-]?%d+%.%d+(?[eE][+-]?%d+)?"    (values :float (parse-float $$)))
   ("[+-]?%d+(?[eE][+-]?%d+)?"         (values :int (truncate (parse-float $$))))
+
+  ;; identifiers
   ("%a%w*"                            (cond
                                        ((string= $$ "true") (values :const :true))
                                        ((string= $$ "false") (values :const :false))
                                        ((string= $$ "null") (values :const :null))
-                                       (t :unknown-identifier))))
+                                       (t
+                                        (error "Unknown identifier ~s" $$)))))
+
+(deflexer string-lexer (:multi-line t)
+  ("\""                               (prog1
+                                          :quote
+                                        (setf *lexer* #'json-lexer)))
+
+  ;; escaped characters
+  ("\\n"                              (values :char #\newline))
+  ("\\t"                              (values :char #\tab))
+  ("\\f"                              (values :char #\formfeed))
+  ("\\b"                              (values :char #\backspace))
+  ("\\r"                              (values :char #\return))
+
+  ;; unicode characters
+  ("\\u(%x%x%x%x)"                    (let ((n (parse-integer $1 :radix 16)))
+                                        (values :char (code-char n))))
+
+  ;; all other characters
+  ("\\."                              (values :char (char $$ 1)))
+  ("."                                (values :char (char $$ 0)))
+
+  ;; don't reach the end of file or line
+  ("$"                                (error "Unterminated string")))
 
 (defparser json-parser
   ((start value) $1)
   
   ;; single json value
   ((value :const) $1)
-  ((value :string) $1)
   ((value :float) $1)
   ((value :int) $1)
+  ((value string) $1)
+  ((value array) $1)
   ((value object) $1)
-  ((value array)
-   (coerce $1 'vector))
 
   ;; unparsable values
-  ((value :unknown-identifier)
-   (error "Unknown JSON identifier"))
   ((value :error)
    (error "JSON syntax error"))
+
+  ;; quoted string
+  ((string :quote chars)
+   (coerce $2 'lw:text-string))
+
+  ;; string characters
+  ((chars :char chars)
+   `(,$1 ,@$2))
+  ((chars :quote)
+   `())
  
   ;; objects
   ((object :object :end-object) ())
   ((object :object members) $2)
 
   ;; members of an object
-  ((members :string :colon value :comma members)
-   `((,$1 . ,$3) ,@$5))
-  ((members :string :colon value :end-object)
-   `((,$1 . ,$3)))
+  ((members string :colon value :comma members)
+   `((,$1 ,$3) ,@$5))
+  ((members string :colon value :end-object)
+   `((,$1 ,$3)))
   
   ;; arrays
   ((array :array :end-array) ())
@@ -111,4 +124,4 @@
 (defun json-decode (string &optional source)
   "Convert a JSON string into a Lisp object."
   (with-lexbuf (string source)
-    (json-parser #'json-lexer)))
+    (parse #'json-parser #'json-lexer)))
