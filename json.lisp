@@ -23,7 +23,8 @@
 (defpackage :json
   (:use :cl :hcl :parsergen :lexer)
   (:export
-   #:json-decode))
+   #:json-decode
+   #:json-decode-file))
 
 (in-package :json)
 
@@ -125,3 +126,10 @@
   "Convert a JSON string into a Lisp object."
   (with-lexbuf (string source)
     (parse #'json-parser #'json-lexer)))
+
+(defun json-decode-file (pathname)
+  "Load a JSON source file and decode it."
+  (with-open-file (f pathname)
+    (let ((s (make-array (file-length f) :element-type 'character :fill-pointer t)))
+      (setf (fill-pointer s) (read-sequence s f))
+      (json-decode s pathname))))
