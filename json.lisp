@@ -21,7 +21,7 @@
   (require "parsergen"))
 
 (defpackage :json
-  (:use :cl :hcl :parsergen :lexer)
+  (:use :cl :lw :hcl :parsergen :lexer)
   (:export
    #:json-decode
    #:json-decode-file))
@@ -29,7 +29,7 @@
 (in-package :json)
 
 (deflexer json-lexer (:multi-line t)
-  ("[%s%n]+"                          :next-token)
+  ("[%s%n]+")
   ("{"                                :object)
   ("}"                                :end-object)
   ("%["                               :array)
@@ -38,9 +38,7 @@
   (","                                :comma)
 
   ;; strings use a different lexer
-  ("\""                               (prog1
-                                          :quote
-                                        (setf *lexer* #'string-lexer)))
+  ("\""                               (push-lexer #'string-lexer :string))
 
   ;; numbers
   ("[+-]?%d+%.%d+(?[eE][+-]?%d+)?"    (values :float (parse-float $$)))
@@ -55,24 +53,22 @@
                                         (error "Unknown identifier ~s" $$)))))
 
 (deflexer string-lexer (:multi-line t)
-  ("\""                               (prog1
-                                          :quote
-                                        (setf *lexer* #'json-lexer)))
+  ("\""                               (pop-lexer :end-string))
 
   ;; escaped characters
-  ("\\n"                              (values :char #\newline))
-  ("\\t"                              (values :char #\tab))
-  ("\\f"                              (values :char #\formfeed))
-  ("\\b"                              (values :char #\backspace))
-  ("\\r"                              (values :char #\return))
+  ("\\n"                              (values :chars #\newline))
+  ("\\t"                              (values :chars #\tab))
+  ("\\f"                              (values :chars #\formfeed))
+  ("\\b"                              (values :chars #\backspace))
+  ("\\r"                              (values :chars #\return))
 
   ;; unicode characters
   ("\\u(%x%x%x%x)"                    (let ((n (parse-integer $1 :radix 16)))
-                                        (values :char (code-char n))))
+                                        (values :chars (code-char n))))
 
   ;; all other characters
-  ("\\."                              (values :char (char $$ 1)))
-  ("."                                (values :char (char $$ 0)))
+  ("\\(.)"                            (values :chars $1))
+  ("[^\\\"]+"                         (values :chars $$))
 
   ;; don't reach the end of file or line
   ("$"                                (error "Unterminated string")))
@@ -93,14 +89,12 @@
    (error "JSON syntax error"))
 
   ;; quoted string
-  ((string :quote chars)
-   (coerce $2 'lw:text-string))
+  ((string :string chars)
+   (reduce #'string-append $2 :initial-value ""))
 
-  ;; string characters
-  ((chars :char chars)
-   `(,$1 ,@$2))
-  ((chars :quote)
-   `())
+  ;; character sequences
+  ((chars :chars chars) `(,$1 ,@$2))
+  ((chars :end-string) `())
  
   ;; objects
   ((object :object :end-object) ())
@@ -122,14 +116,24 @@
   ((elements value :end-array)
    `(,$1)))
 
+(defparser string-parser
+  ((start string) $1)
+
+  ;; convert a list of characters to a string
+  ((string chars)
+   (coerce $1 'lw:text-string))
+
+  ;; collect a list of characters
+  ((chars :char chars)
+   `(,$1 ,@$2))
+  ((chars)
+   `()))
+
 (defun json-decode (string &optional source)
   "Convert a JSON string into a Lisp object."
-  (with-lexbuf (string source)
-    (parse #'json-parser #'json-lexer)))
+  (let ((tokens (tokenize #'json-lexer string source)))
+    (parse #'json-parser tokens)))
 
 (defun json-decode-file (pathname)
-  "Load a JSON source file and decode it."
-  (with-open-file (f pathname)
-    (let ((s (make-array (file-length f) :element-type 'character :fill-pointer t)))
-      (setf (fill-pointer s) (read-sequence s f))
-      (json-decode s pathname))))
+  "Load a JSON source file and parse it."
+  (json-decode (slurp pathname) pathname))
