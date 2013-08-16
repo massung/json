@@ -29,7 +29,7 @@
 (in-package :json)
 
 (deflexer json-lexer (:multi-line t)
-  ("[%s%n]+")
+  ("[%s%n]+"                          :next-token)
   ("{"                                :object)
   ("}"                                :end-object)
   ("%["                               :array)
