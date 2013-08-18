@@ -28,50 +28,52 @@
 
 (in-package :json)
 
-(deflexer json-lexer (:multi-line t)
-  ("[%s%n]+"                          :next-token)
-  ("{"                                :object)
-  ("}"                                :end-object)
-  ("%["                               :array)
-  ("%]"                               :end-array)
-  (":"                                :colon)
-  (","                                :comma)
+(deflexer json-lexer (:case-fold t :multi-line t)
+  ("[%s%n]+"                :next-token)
+  ("{"                      :object)
+  ("}"                      :end-object)
+  ("%["                     :array)
+  ("%]"                     :end-array)
+  (":"                      :colon)
+  (","                      :comma)
 
   ;; strings use a different lexer
-  ("\""                               (push-lexer #'string-lexer :string))
+  ("\""                     (push-lexer #'string-lexer :string))
 
   ;; numbers
-  ("[+-]?%d+%.%d+(?[eE][+-]?%d+)?"    (values :float (parse-float $$)))
-  ("[+-]?%d+(?[eE][+-]?%d+)?"         (values :int (truncate (parse-float $$))))
+  ("[+-]?%d+%.%d+e[+-]?%d+" (values :float (parse-float $$)))
+  ("[+-]?%d+%.%d+"          (values :float (parse-float $$)))
+  ("[+-]?%d+e[+-]?%d+"      (values :int (truncate (parse-float $$))))
+  ("[+-]?%d+"               (values :int (parse-integer $$)))
 
   ;; identifiers
-  ("%a%w*"                            (cond
-                                       ((string= $$ "true") (values :const :true))
-                                       ((string= $$ "false") (values :const :false))
-                                       ((string= $$ "null") (values :const :null))
-                                       (t
-                                        (error "Unknown identifier ~s" $$)))))
+  ("%a%w*"                  (cond
+                             ((string= $$ "true") (values :const :true))
+                             ((string= $$ "false") (values :const :false))
+                             ((string= $$ "null") (values :const :null))
+                             (t
+                              (error "Unknown identifier ~s" $$)))))
 
 (deflexer string-lexer (:multi-line t)
-  ("\""                               (pop-lexer :end-string))
+  ("\""                     (pop-lexer :end-string))
 
   ;; escaped characters
-  ("\\n"                              (values :chars #\newline))
-  ("\\t"                              (values :chars #\tab))
-  ("\\f"                              (values :chars #\formfeed))
-  ("\\b"                              (values :chars #\backspace))
-  ("\\r"                              (values :chars #\return))
+  ("\\n"                    (values :chars #\newline))
+  ("\\t"                    (values :chars #\tab))
+  ("\\f"                    (values :chars #\formfeed))
+  ("\\b"                    (values :chars #\backspace))
+  ("\\r"                    (values :chars #\return))
 
   ;; unicode characters
-  ("\\u(%x%x%x%x)"                    (let ((n (parse-integer $1 :radix 16)))
-                                        (values :chars (code-char n))))
+  ("\\u(%x%x%x%x)"          (let ((n (parse-integer $1 :radix 16)))
+                              (values :chars (code-char n))))
 
   ;; all other characters
-  ("\\(.)"                            (values :chars $1))
-  ("[^\\\"]+"                         (values :chars $$))
+  ("\\(.)"                  (values :chars $1))
+  ("[^\\\"]+"               (values :chars $$))
 
   ;; don't reach the end of file or line
-  ("$"                                (error "Unterminated string")))
+  ("$"                      (error "Unterminated string")))
 
 (defparser json-parser
   ((start value) $1)
