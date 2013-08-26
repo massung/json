@@ -24,7 +24,7 @@
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
    #:json-decode
-   #:json-decode-file))
+   #:json-encode))
 
 (in-package :json)
 
@@ -109,8 +109,8 @@
    `((,$1 ,$3)))
   
   ;; arrays
-  ((array :array :end-array) ())
-  ((array :array elements) $2)
+  ((array :array elements) (coerce $2 'vector))
+  ((array :array :end-array) #())
 
   ;; elements of an array
   ((elements value :comma elements)
@@ -136,6 +136,39 @@
   (let ((tokens (tokenize #'json-lexer string source)))
     (parse #'json-parser tokens)))
 
-(defun json-decode-file (pathname)
-  "Load a JSON source file and parse it."
-  (json-decode (slurp pathname) pathname))
+(defun json-encode (value)
+  "Convert a Lisp object to a JSON string."
+  (flet ((encode-object (kv)
+           (destructuring-bind (k v)
+               kv
+             (format nil "~s:~a" k (json-encode v))))
+         (encode-char (c)
+           (cond
+            ((char= c #\newline) "\\n")
+            ((char= c #\tab) "\\t")
+            ((char= c #\formfeed) "\\f")
+            ((char= c #\backspace) "\\b")
+            ((char= c #\return) "\\r")
+            ((char> c #\~)
+             (format nil "\\u~16,'0r" (char-code c)))
+            (t
+             (string c)))))
+    (with-output-to-string (s)
+      (cond
+       ((listp value)
+        (format s "{~{~a~^,~}}" (mapcar #'encode-object value)))
+       ((stringp value)
+        (format s "\"~{~a~}\"" (map 'list #'encode-char value)))
+       ((vectorp value)
+        (format s "[~{~a~^,~}]" (map 'list #'json-encode value)))
+       ((numberp value)
+        (format s "~s" value))
+       ((eq value :true)
+        (format s "true"))
+       ((eq value :false)
+        (format s "false"))
+       ((eq value :null)
+        (format s "null"))
+       (t
+        (error "Cannot encode value as JSON: ~a" value))))))
+
