@@ -3,4 +3,5 @@
  :version 1.0
  :author "massung@gmail.com"
  :url "http://github.com/massung/json"
- :deps ("re" "lexer"))
+ :deps ("re" "lexer")
+ :features (:lispworks))
