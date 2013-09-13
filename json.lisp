@@ -65,7 +65,7 @@
   ("\\r"                      (values :chars #\return))
 
   ;; unicode characters
-  ("\\u(%x%x%x%x)"            (let ((n (parse-integer $1 :radix 16)))
+  ("\\[uU](%x%x%x%x)"         (let ((n (parse-integer $1 :radix 16)))
                                 (values :chars (code-char n))))
 
   ;; all other characters
@@ -92,11 +92,14 @@
 
   ;; quoted string
   ((string :string chars)
-   (reduce #'string-append $2 :initial-value ""))
+   (with-output-to-string (s nil :element-type 'character)
+     (loop :for c :in $2 :do (princ c s))))
 
   ;; character sequences
-  ((chars :chars chars) `(,$1 ,@$2))
-  ((chars :end-string) `())
+  ((chars :chars chars)
+   `(,$1 ,@$2))
+  ((chars :end-string)
+   `())
  
   ;; objects
   ((object :object :end-object) ())
