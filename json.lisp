@@ -48,9 +48,9 @@
 
   ;; identifiers
   ("%a%w*"                    (cond
-                               ((string= $$ "true") (values :const :true))
-                               ((string= $$ "false") (values :const :false))
-                               ((string= $$ "null") (values :const :null))
+                               ((string= $$ "true") (values :const t))
+                               ((string= $$ "false") (values :const nil))
+                               ((string= $$ "null") (values :const nil))
                                (t
                                 (error "Unknown identifier ~s" $$)))))
 
@@ -139,13 +139,6 @@
   (let ((tokens (tokenize #'json-lexer string source)))
     (parse #'json-parser tokens)))
 
-(defmethod json-encode ((value standard-object))
-  "Encode any class with slots to a string."
-  (flet ((kv (slot)
-           (let ((name (slot-definition-name slot)))
-             (list (json-encode name) (json-encode (slot-value value name))))))
-    (format nil "{~{~a:~a~^,~}}" (mapcan #'kv (class-slots (class-of value))))))
-
 (defmethod json-encode ((value number))
   "Encode a number to a string."
   (format nil "~a" value))
@@ -165,10 +158,6 @@
              (string c)))))
     (format nil "\"~{~a~}\"" (map 'list #'encode-char value))))
 
-(defmethod json-encode ((value symbol))
-  "Encode a symbol to a string."
-  (json-encode (symbol-name value)))
-
 (defmethod json-encode ((value vector))
   "Encode an array to a string."
   (format nil "[~{~a~^,~}]" (map 'list #'json-encode value)))
@@ -177,3 +166,17 @@
   "Encode an array to a string."
   (format nil "[~{~a~^,~}]" (map 'list #'json-encode value)))
 
+(defmethod json-encode ((value symbol))
+  "Encode a symbol to a string."
+  (cond
+   ((eq value t) "true")
+   ((eq value nil) "false")
+   (t
+    (json-encode (string-downcase (symbol-name value))))))
+
+(defmethod json-encode ((value standard-object))
+  "Encode any class with slots to a string."
+  (flet ((encode-slot (slot)
+           (let ((name (slot-definition-name slot)))
+             (list (json-encode name) (json-encode (slot-value value name))))))
+    (format nil "{~{~a:~a~^,~}}" (mapcan #'encode-slot (class-slots (class-of value))))))
