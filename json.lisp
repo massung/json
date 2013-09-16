@@ -23,7 +23,11 @@
 (defpackage :json
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
+   ;; decoding functions
    #:json-decode
+   #:json-decode-into
+
+   ;; encoding functions
    #:json-encode))
 
 (in-package :json)
@@ -139,6 +143,21 @@
   (let ((tokens (tokenize #'json-lexer string source)))
     (parse #'json-parser tokens)))
 
+(defun json-decode-into (json type &optional slot-map)
+  "Use a class instance and a mapping of slots to transform functions to decode."
+  (let ((value (make-instance type)))
+    (prog1
+        value
+      (loop :for slot-def :in (class-slots (class-of value))
+            :for slot-name := (slot-definition-name slot-def)
+            :for slot-value := (assoc slot-name json :test #'string-equal)
+            :when slot-value
+            :do (setf (slot-value value slot-name)
+                      (let ((fmap (assoc slot-name slot-map)))
+                        (if (null fmap)
+                            (second slot-value)
+                          (funcall (second fmap) (second slot-value)))))))))
+
 (defmethod json-encode ((value number))
   "Encode a number to a string."
   (format nil "~a" value))
@@ -147,13 +166,14 @@
   "Encode a string to a string."
   (flet ((encode-char (c)
            (cond
+            ((char= c #\") "\\\"")
             ((char= c #\newline) "\\n")
             ((char= c #\tab) "\\t")
             ((char= c #\formfeed) "\\f")
             ((char= c #\backspace) "\\b")
             ((char= c #\return) "\\r")
             ((char> c #\~)
-             (format nil "\\u~16,'0r" (char-code c)))
+             (format nil "\\u~16,,'0r" (char-code c)))
             (t
              (string c)))))
     (format nil "\"~{~a~}\"" (map 'list #'encode-char value))))
