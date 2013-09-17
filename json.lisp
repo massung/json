@@ -23,11 +23,7 @@
 (defpackage :json
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
-   ;; decoding functions
    #:json-decode
-   #:json-decode-into
-
-   ;; encoding functions
    #:json-encode))
 
 (in-package :json)
@@ -44,17 +40,17 @@
   ;; strings use a different lexer
   ("\""                       (push-lexer #'string-lexer :string))
 
-  ;; numbers
+  ;; number constants
   ("[+%-]?%d+%.%d+e[+%-]?%d+" (values :float (parse-float $$)))
   ("[+%-]?%d+%.%d+"           (values :float (parse-float $$)))
   ("[+%-]?%d+e[+%-]?%d+"      (values :int (truncate (parse-float $$))))
   ("[+%-]?%d+"                (values :int (parse-integer $$)))
 
-  ;; identifiers
+  ;; identifier constants
   ("%a%w*"                    (cond
-                               ((string= $$ "true") (values :const t))
-                               ((string= $$ "false") (values :const nil))
-                               ((string= $$ "null") (values :const nil))
+                               ((string= $$ "true") (values :bool t))
+                               ((string= $$ "false") (values :bool nil))
+                               ((string= $$ "null") (values :null))
                                (t
                                 (error "Unknown identifier ~s" $$)))))
 
@@ -69,7 +65,7 @@
   ("\\r"                      (values :chars #\return))
 
   ;; unicode characters
-  ("\\[uU](%x%x%x%x)"         (let ((n (parse-integer $1 :radix 16)))
+  ("\\u(%x%x%x%x)"            (let ((n (parse-integer $1 :radix 16)))
                                 (values :chars (code-char n))))
 
   ;; all other characters
@@ -81,9 +77,10 @@
 
 (defparser json-parser
   ((start value) $1)
-  
-  ;; single json value
-  ((value :const) $1)
+
+  ;; numerics, strings, arrays, and objects
+  ((value :null) :null)
+  ((value :bool) $1)
   ((value :float) $1)
   ((value :int) $1)
   ((value string) $1)
@@ -116,8 +113,10 @@
    `((,$1 ,$3)))
   
   ;; arrays
-  ((array :array elements) $2)
-  ((array :array :end-array) ())
+  ((array :array elements)
+   (coerce $2 'vector))
+  ((array :array :end-array)
+   #())
 
   ;; elements of an array
   ((elements value :comma elements)
@@ -143,29 +142,27 @@
   (let ((tokens (tokenize #'json-lexer string source)))
     (parse #'json-parser tokens)))
 
-(defun json-decode-into (json type &optional slot-map)
-  "Use a class instance and a mapping of slots to transform functions to decode."
-  (let ((value (make-instance type)))
-    (prog1
-        value
-      (loop :for slot-def :in (class-slots (class-of value))
-            :for slot-name := (slot-definition-name slot-def)
-            :for slot-value := (assoc slot-name json :test #'string-equal)
-            :when slot-value
-            :do (setf (slot-value value slot-name)
-                      (let ((fmap (assoc slot-name slot-map)))
-                        (if (null fmap)
-                            (second slot-value)
-                          (funcall (second fmap) (second slot-value)))))))))
+(defmethod json-encode ((value symbol))
+  "Encode the T constant as JSON true."
+  (cond
+   ((eq value nil) "false")
+   ((eq value t)   "true")
+   (t
+    (json-encode (symbol-name value)))))
 
 (defmethod json-encode ((value number))
-  "Encode a number to a string."
-  (format nil "~a" value))
+  "Encode a number as a JSON value."
+  (write-to-string value))
+
+(defmethod json-encode ((value ratio))
+  "Encode a ratio as a JSON value."
+  (write-to-string (float value)))
 
 (defmethod json-encode ((value string))
   "Encode a string to a string."
   (flet ((encode-char (c)
            (cond
+            ((char= c #\\) "\\\\")
             ((char= c #\") "\\\"")
             ((char= c #\newline) "\\n")
             ((char= c #\tab) "\\t")
@@ -185,14 +182,6 @@
 (defmethod json-encode ((value list))
   "Encode an array to a string."
   (format nil "[~{~a~^,~}]" (map 'list #'json-encode value)))
-
-(defmethod json-encode ((value symbol))
-  "Encode a symbol to a string."
-  (cond
-   ((eq value t) "true")
-   ((eq value nil) "false")
-   (t
-    (json-encode (string-downcase (symbol-name value))))))
 
 (defmethod json-encode ((value standard-object))
   "Encode any class with slots to a string."
