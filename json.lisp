@@ -23,7 +23,11 @@
 (defpackage :json
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
+   ;; decoding functions
    #:json-decode
+   #:json-decode-into
+
+   ;; encoding functions
    #:json-encode))
 
 (in-package :json)
@@ -142,11 +146,29 @@
   (let ((tokens (tokenize #'json-lexer string source)))
     (parse #'json-parser tokens)))
 
+(defun json-decode-into (json class)
+  "Create an instance of class and assoc all slots."
+  (if (vectorp json)
+      (map 'vector #'(lambda (i) (json-decode-into i class)) json)
+    (let ((p (make-instance class)))
+      (prog1
+          p
+        (loop :for slot :in (class-slots (class-of p))
+              :for slot-name := (slot-definition-name slot)
+              :for slot-type := (slot-definition-type slot)
+              :do (let ((value (assoc slot-name json :test #'string=)))
+                    (when value
+                      (setf (slot-value p slot-name)
+                            (if (eq slot-type t)
+                                (second value)
+                              (json-decode-into (second value) slot-type))))))))))
+
 (defmethod json-encode ((value symbol))
   "Encode the T constant as JSON true."
   (cond
-   ((eq value nil) "false")
-   ((eq value t)   "true")
+   ((eq value nil)   "false")
+   ((eq value t)     "true")
+   ((eq value :null) "null")
    (t
     (json-encode (symbol-name value)))))
 
