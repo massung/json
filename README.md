@@ -12,20 +12,42 @@ To convert from JSON to a Lisp object use `JSON-DECODE`.
 
 The two parameters are the same parameters that the `tokenize` function takes in the `lexer` package.
 
-JSON arrays are decoded as Lisp vectors and JSON objects are decoded into associative lists. The JSON literals `true`, `false`, and `null` are decoded as the list keywords `:TRUE`, `:FALSE`, and `:NULL`. All other JSON values should translate directly.
+JSON arrays are decoded as Lisp vectors and JSON objects are decoded into associative lists. The JSON literals `true`, `false`, and `null` are decoded as the list keywords `t`, `nil`, and `:NULL`. All other JSON values should translate directly.
 
-To encode a Lisp object as JSON use the `JSON-ENCODE` function.
+	CL-USER > (json-decode "{\"test\": [1,-4e+3,true]}")
+	(("test" #(1 -4000 T)))
 
-	(json-encode value) ;=> string
+## Decoding Into a CLOS Object
 
-All the same rules for decoding apply to encoding: vectors are encoded as JSON arrays and lists are encoded as objects.
+If you have a class defined, a JSON a-list can be decoded into an instance of the object type.
 
-## Examples
+	(json-decode-into class string &optional source)
 
-	CL-USER > (json-decode "{\"test\": [1,-4e+3,true,{}]}")
-	(("test" #(1 -4000 :TRUE NIL)))
-	NIL
+For example:
 
-	CL-USER > (json-encode *)
-	"{\"test\":[1,-4000,true,{}]}"
-	NIL
+	CL-USER > (defclass login ()
+	            ((|user| :initarg :user :initform "guest")
+	             (|pass| :initarg :pass :initform "12345")))
+	#<STANDARD-CLASS LOGIN 200A80BF>
+
+	CL-USER > (defclass account ()
+	            ((|login| :type login :initform nil)))
+	#<STANDARD-CLASS ACCOUNT 200C7BEF>
+
+Now we have defined two classes: `login` and `account`, where an `account` contains a `login`. Using `json-decode-into`, we can take decode JSON directly into a CLOS object instance.
+
+	CL-USER > (json-decode-into 'account "[{\"login\":{\"user\":\"jeff\"}},{\"login\":{\"user\":\"mark\", \"pass\":\"kd93\"}}]")
+	#(#<ACCOUNT 21F97D1B> #<ACCOUNT 21F97D03>)
+
+Notice how since the JSON was an array, we got back an array of `account` objects. And, if we look inside, we'll see that since the `|login|` slot was declared with `:type login`, it was further decoded as well.
+
+*NOTE: The symbol name of each slot in a class is what's used to decode into an object instance. The `assoc` is performed with `:test #'string=`. This means it's probably better to use `|symbol|` symbols to clearly get the case sensitivity that is desired for each slot name.*
+
+## Encoding to JSON
+
+Encoding back to JSON is done using the `json-encode` generic method. Methods have been implemented for numbers, symbols, strings, vectors, lists, and standard objects.
+
+Vectors and lists both encode to arrays. An empty list (`nil`) encodes to `false`. To encode a JSON object, create an instance of an object and all its slots will be encoded to JSON.
+
+	CL-USER > (json-encode (vector 1 t (make-instance 'login :user "jeff" :pass "vy903k#2")))
+	"[1,true,{\"user\":\"jeff\",\"pass\":\"vy903k#2\"}]"

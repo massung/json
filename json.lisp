@@ -146,22 +146,26 @@
   (let ((tokens (tokenize #'json-lexer string source)))
     (parse #'json-parser tokens)))
 
-(defun json-decode-into (json class)
+(defun json-decode-into (class string &optional source)
   "Create an instance of class and assoc all slots."
-  (if (vectorp json)
-      (map 'vector #'(lambda (i) (json-decode-into i class)) json)
-    (let ((p (make-instance class)))
-      (prog1
-          p
-        (loop :for slot :in (class-slots (class-of p))
-              :for slot-name := (slot-definition-name slot)
-              :for slot-type := (slot-definition-type slot)
-              :do (let ((value (assoc slot-name json :test #'string=)))
-                    (when value
-                      (setf (slot-value p slot-name)
-                            (if (eq slot-type t)
-                                (second value)
-                              (json-decode-into (second value) slot-type))))))))))
+  (labels ((decode-into (class json)
+             (if (vectorp json)
+                 (map 'vector #'(lambda (i) (decode-into class i)) json)
+               (let ((p (make-instance class)))
+                 (prog1
+                     p
+                   (loop :for slot :in (class-slots (class-of p))
+                         :for slot-name := (slot-definition-name slot)
+                         :for slot-type := (slot-definition-type slot)
+                         :do (let ((value (assoc slot-name json :test #'string=)))
+                               (when value
+                                 (setf (slot-value p slot-name)
+                                       (if (eq slot-type t)
+                                           (second value)
+                                         (decode-into slot-type (second value))))))))))))
+    (let ((json (json-decode string source)))
+      (when json
+        (decode-into class json)))))
 
 (defmethod json-encode ((value symbol))
   "Encode the T constant as JSON true."
