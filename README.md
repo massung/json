@@ -41,7 +41,9 @@ Now we have defined two classes: `login` and `account`, where an `account` conta
 
 Notice how since the JSON was an array, we got back an array of `account` objects. And, if we look inside, we'll see that since the `|login|` slot was declared with `:type login`, it was further decoded as well.
 
-*NOTE: The symbol name of each slot in a class is what's used to decode into an object instance. The `assoc` is performed with `:test #'string=`. This means it's probably better to use `|symbol|` symbols to clearly get the case sensitivity that is desired for each slot name.*
+The symbol name of each slot in a class is what's used to decode into an object instance. The `assoc` is performed with `:test #'string=`. This means it's probably better to use `|symbol|` symbols to clearly get the case sensitivity that is desired for each slot name.
+
+*NOTE: If your class is `subtypep` of `condition` then `json-decode-into` will use `make-condition` instead of `make-instance` to create your object.*
 
 ## Encoding to JSON
 

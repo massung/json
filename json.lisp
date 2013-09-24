@@ -151,7 +151,7 @@
   (labels ((decode-into (class json)
              (if (vectorp json)
                  (map 'vector #'(lambda (i) (decode-into class i)) json)
-               (let ((p (make-instance class)))
+               (let ((p (funcall (if (subtypep class 'condition) #'make-condition #'make-instance) class)))
                  (prog1
                      p
                    (loop :for slot :in (class-slots (class-of p))
