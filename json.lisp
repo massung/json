@@ -160,9 +160,9 @@
                          :do (let ((value (assoc slot-name json :test #'string=)))
                                (when value
                                  (setf (slot-value p slot-name)
-                                       (if (eq slot-type t)
-                                           (second value)
-                                         (decode-into slot-type (second value))))))))))))
+                                       (if (subtypep slot-type 'standard-object)
+                                           (decode-into slot-type (second value))
+                                         (second value)))))))))))
     (let ((json (json-decode string source)))
       (when json
         (decode-into class json)))))

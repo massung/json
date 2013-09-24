@@ -31,7 +31,8 @@ For example:
 	#<STANDARD-CLASS LOGIN 200A80BF>
 
 	CL-USER > (defclass account ()
-	            ((|login| :type login :initform nil)))
+	            ((|login|   :type login)
+	             (|balance| :initform 0)))
 	#<STANDARD-CLASS ACCOUNT 200C7BEF>
 
 Now we have defined two classes: `login` and `account`, where an `account` contains a `login`. Using `json-decode-into`, we can take decode JSON directly into a CLOS object instance.
