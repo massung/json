@@ -23,6 +23,8 @@
 (defpackage :json
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
+   #:*json-null*
+
    ;; decoding functions
    #:json-decode
    #:json-decode-into
@@ -31,6 +33,9 @@
    #:json-encode))
 
 (in-package :json)
+
+(defvar *json-null* :null
+  "The value used to decode JSON null to.")
 
 (deflexer json-lexer
   ("[%s%n]+"                  :next-token)
@@ -83,7 +88,7 @@
   ((start value) $1)
 
   ;; numerics, strings, arrays, and objects
-  ((value :null) :null)
+  ((value :null) *json-null*)
   ((value :bool) $1)
   ((value :float) $1)
   ((value :int) $1)
