@@ -36,6 +36,8 @@
 
 (defvar *json-null* :null
   "The value used to decode JSON null to.")
+(defvar *json-indent* 0
+  "The indentation level when encoding JSON.")
 
 (deflexer json-lexer
   ("[%s%n]+"                  :next-token)
@@ -172,12 +174,18 @@
       (when json
         (decode-into class json)))))
 
+(defun json-indent (stream &optional object colon-p at-sign-p)
+  "Indents with whitespace."
+  (declare (ignore object colon-p at-sign-p))
+  (terpri stream)
+  (loop :for i :below (* *json-indent* 2) :do (princ #\space stream)))
+
 (defmethod json-encode ((value symbol))
   "Encode the T constant as JSON true."
   (cond
-   ((eq value nil)   "false")
-   ((eq value t)     "true")
-   ((eq value :null) "null")
+   ((eq value *json-null*) "null")
+   ((eq value nil)         "false")
+   ((eq value t)           "true")
    (t
     (json-encode (symbol-name value)))))
 
@@ -201,22 +209,27 @@
             ((char= c #\backspace) "\\b")
             ((char= c #\return) "\\r")
             ((char> c #\~)
-             (format nil "\\u~16,,'0r" (char-code c)))
+             (format nil "\\u~16,4,'0r" (char-code c)))
             (t
              (string c)))))
     (format nil "\"~{~a~}\"" (map 'list #'encode-char value))))
 
-(defmethod json-encode ((value vector))
+(defmethod json-encode ((value sequence))
   "Encode an array to a string."
-  (format nil "[~{~a~^,~}]" (map 'list #'json-encode value)))
-
-(defmethod json-encode ((value list))
-  "Encode an array to a string."
-  (format nil "[~{~a~^,~}]" (map 'list #'json-encode value)))
+  (if (zerop (length value))
+      "[ ]"
+    (flet ((encode (item)
+             (let ((*json-indent* (1+ *json-indent*)))
+               (json-encode item))))
+      (let ((*json-indent* (1+ *json-indent*)))
+        (let ((items (map 'list #'encode value)))
+          (format nil "~/json::json-indent/~:*[ ~{~a~/json::json-indent/~^~:*~^, ~}]" items))))))
 
 (defmethod json-encode ((value standard-object))
   "Encode any class with slots to a string."
-  (flet ((encode-slot (slot)
-           (let ((name (slot-definition-name slot)))
-             (list (json-encode name) (json-encode (slot-value value name))))))
-    (format nil "{~{~a:~a~^,~}}" (mapcan #'encode-slot (class-slots (class-of value))))))
+  (let ((slots (class-slots (class-of value))))
+    (flet ((encode-slot (slot)
+             (let ((*json-indent* (1+ *json-indent*)))
+               (let ((name (slot-definition-name slot)))
+                 (list (json-encode name) (json-encode (slot-value value name)))))))
+      (format nil "{ ~{~a:~a~/json::json-indent/~^~:*~^, ~}}" (mapcan #'encode-slot slots)))))
