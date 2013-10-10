@@ -23,21 +23,15 @@
 (defpackage :json
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
-   #:*json-null*
-
-   ;; decoding functions
    #:json-decode
    #:json-decode-into
-
-   ;; encoding functions
-   #:json-encode))
+   #:json-encode
+   #:json-encode-into))
 
 (in-package :json)
 
-(defvar *json-null* :null
-  "The value used to decode JSON null to.")
-(defvar *json-indent* 0
-  "The indentation level when encoding JSON.")
+(defvar *json-object* nil
+  "A standard-object class name to decode an object into.")
 
 (deflexer json-lexer
   ("[%s%n]+"                  :next-token)
@@ -59,9 +53,9 @@
 
   ;; identifier constants
   ("%a%w*"                    (cond
-                               ((string= $$ "true") (values :bool t))
-                               ((string= $$ "false") (values :bool nil))
-                               ((string= $$ "null") (values :null))
+                               ((string= $$ "true") :true)
+                               ((string= $$ "false") :false)
+                               ((string= $$ "null") :null)
                                (t
                                 (error "Unknown identifier ~s" $$)))))
 
@@ -90,9 +84,9 @@
   ((start value) $1)
 
   ;; numerics, strings, arrays, and objects
-  ((value :null) *json-null*)
-  ((value :bool) $1)
-  ((value :float) $1)
+  ((value :true) t)
+  ((value :false) nil)
+  ((value :null) nil)
   ((value :int) $1)
   ((value string) $1)
   ((value array) $1)
@@ -124,10 +118,10 @@
    `((,$1 ,$3)))
   
   ;; arrays
-  ((array :array elements)
-   (coerce $2 'vector))
   ((array :array :end-array)
    #())
+  ((array :array elements)
+   (coerce $2 'vector))
 
   ;; elements of an array
   ((elements value :comma elements)
@@ -155,50 +149,63 @@
 
 (defun json-decode-into (class string &optional source)
   "Create an instance of class and assoc all slots."
-  (labels ((decode-into (class json)
-             (if (vectorp json)
-                 (map 'vector #'(lambda (i) (decode-into class i)) json)
-               (let ((p (funcall (if (subtypep class 'condition) #'make-condition #'make-instance) class)))
-                 (prog1
-                     p
-                   (loop :for slot :in (class-slots (class-of p))
-                         :for slot-name := (slot-definition-name slot)
-                         :for slot-type := (slot-definition-type slot)
-                         :do (let ((value (assoc slot-name json :test #'string=)))
-                               (when value
-                                 (setf (slot-value p slot-name)
-                                       (if (subtypep slot-type 'standard-object)
-                                           (decode-into slot-type (second value))
-                                         (second value)))))))))))
-    (let ((json (json-decode string source)))
-      (when json
-        (decode-into class json)))))
+  (labels ((decode-into (class value)
+             (cond
+              ((vectorp value)
+               (map 'vector #'(lambda (i) (decode-into class i)) value))
+              ((null value)
+               (make-instance class))
+              ((atom value)
+               (error "~a is not of type ~a." value class))
+              (t
+               (let ((object (make-instance class)))
+                 (loop :for slot :in (class-slots (class-of object))
 
-(defun json-indent (stream &optional object colon-p at-sign-p)
-  "Indents with whitespace."
-  (declare (ignore object colon-p at-sign-p))
-  (terpri stream)
-  (loop :for i :below (* *json-indent* 2) :do (princ #\space stream)))
+                       ;; use the name and type of the slot
+                       :for slot-name := (slot-definition-name slot)
+                       :for slot-type := (slot-definition-type slot)
 
-(defmethod json-encode ((value symbol))
-  "Encode the T constant as JSON true."
-  (cond
-   ((eq value *json-null*) "null")
-   ((eq value nil)         "false")
-   ((eq value t)           "true")
-   (t
-    (json-encode (symbol-name value)))))
+                       ;; return the object when done decoding
+                       :finally (return object)
 
-(defmethod json-encode ((value number))
-  "Encode a number as a JSON value."
-  (write-to-string value))
+                       ;; decode into the slot from the member values
+                       :do (when-let (prop (assoc slot-name value :test #'string=))
+                             (setf (slot-value object slot-name)
+                                   (if (subtypep slot-type 'standard-object)
+                                       (decode-into slot-type (second prop))
+                                     (second prop))))))))))
+    (when-let (json (json-decode string source))
+      (decode-into class json))))
 
-(defmethod json-encode ((value ratio))
-  "Encode a ratio as a JSON value."
-  (write-to-string (float value)))
+(defun json-encode (value)
+  "Encodes a Lisp value into a string."
+  (with-output-to-string (s)
+    (json-encode-into value s)))
 
-(defmethod json-encode ((value string))
-  "Encode a string to a string."
+(defmethod json-encode-into ((value (eql t)) &optional (*standard-output* *standard-output*))
+  "Encode the true value."
+  (declare (ignore value))
+  (write-string "true"))
+
+(defmethod json-encode-into ((value (eql nil)) &optional (*standard-output* *standard-output*))
+  "Encode the null constant."
+  (declare (ignore value))
+  (write-string "null"))
+
+(defmethod json-encode-into ((value symbol) &optional (*standard-output* *standard-output*))
+  "Encode a symbol to a stream."
+  (json-encode-into (symbol-name value)))
+
+(defmethod json-encode-into ((value number) &optional (*standard-output* *standard-output*))
+  "Encode a number to a stream."
+  (write value))
+
+(defmethod json-encode-into ((value ratio) &optional (*standard-output* *standard-output*))
+  "Encode a ratio to a stream."
+  (write (float value)))
+
+(defmethod json-encode-into ((value string) &optional (*standard-output* *standard-output*))
+  "Encode a string as a stream."
   (flet ((encode-char (c)
            (cond
             ((char= c #\\) "\\\\")
@@ -212,24 +219,38 @@
              (format nil "\\u~16,4,'0r" (char-code c)))
             (t
              (string c)))))
-    (format nil "\"~{~a~}\"" (map 'list #'encode-char value))))
+    (format t "\"~{~a~}\"" (map 'list #'encode-char value))))
 
-(defmethod json-encode ((value sequence))
-  "Encode an array to a string."
-  (if (zerop (length value))
-      "[ ]"
-    (flet ((encode (item)
-             (let ((*json-indent* (1+ *json-indent*)))
-               (json-encode item))))
-      (let ((*json-indent* (1+ *json-indent*)))
-        (let ((items (map 'list #'encode value)))
-          (format nil "~/json::json-indent/~:*[ ~{~a~/json::json-indent/~^~:*~^, ~}]" items))))))
+(defmethod json-encode-into ((value vector) &optional (*standard-output* *standard-output*))
+  "Encode an array to a stream."
+  (let ((*print-level* nil)
+        (*print-length* nil)
+        (*print-lines* nil)
+        (*print-right-margin* 14))
+    (pprint-logical-block (*standard-output* nil :prefix "[" :suffix "]")
+      (when (plusp (length value))
+        (json-encode-into (aref value 0)))
+      (loop :for i :from 1 :below (length value)
+            :do (progn
+                  (write-char #\,)
+                  (pprint-newline :linear)
+                  (pprint-indent :current 0)
+                  (json-encode-into (aref value i)))))))
 
-(defmethod json-encode ((value standard-object))
-  "Encode any class with slots to a string."
-  (let ((slots (class-slots (class-of value))))
-    (flet ((encode-slot (slot)
-             (let ((*json-indent* (1+ *json-indent*)))
-               (let ((name (slot-definition-name slot)))
-                 (list (json-encode name) (json-encode (slot-value value name)))))))
-      (format nil "{ ~{~a:~a~/json::json-indent/~^~:*~^, ~}}" (mapcan #'encode-slot slots)))))
+(defmethod json-encode-into ((value standard-object) &optional (*standard-output* *standard-output*))
+  "Encode any class with slots to a stream."
+  (let ((*print-level* nil)
+        (*print-length* nil)
+        (*print-lines* nil)
+        (*print-right-margin* 14))
+    (pprint-logical-block (*standard-output* (class-slots (class-of value)) :prefix "{" :suffix "}")
+      (pprint-exit-if-list-exhausted)
+      (loop
+       (let ((name (slot-definition-name (pprint-pop))))
+         (json-encode-into name)
+         (write-char #\:)
+         (json-encode-into (slot-value value name))
+         (pprint-exit-if-list-exhausted)
+         (write-char #\,)
+         (pprint-newline :linear)
+         (pprint-indent :current 0))))))
