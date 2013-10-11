@@ -223,7 +223,8 @@
 
 (defmethod json-encode-into ((value vector) &optional (*standard-output* *standard-output*))
   "Encode an array to a stream."
-  (let ((*print-level* nil)
+  (let ((*print-pretty* t)
+        (*print-level* nil)
         (*print-length* nil)
         (*print-lines* nil)
         (*print-right-margin* 14))
@@ -239,7 +240,8 @@
 
 (defmethod json-encode-into ((value standard-object) &optional (*standard-output* *standard-output*))
   "Encode any class with slots to a stream."
-  (let ((*print-level* nil)
+  (let ((*print-pretty* t)
+        (*print-level* nil)
         (*print-length* nil)
         (*print-lines* nil)
         (*print-right-margin* 14))
