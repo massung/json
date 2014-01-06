@@ -171,9 +171,13 @@
                        ;; decode into the slot from the member values
                        :do (when-let (prop (assoc slot-name value :test #'string=))
                              (setf (slot-value object slot-name)
-                                   (if (subtypep slot-type 'standard-object)
-                                       (decode-into slot-type (second prop))
-                                     (second prop))))))))))
+                                   (cond
+                                    ((subtypep slot-type 'keyword)
+                                     (intern (second prop) :keyword))
+                                    ((subtypep slot-type 'standard-object)
+                                     (decode-into slot-type (second prop)))
+                                    (t
+                                     (second prop)))))))))))
     (when-let (json (json-decode string source))
       (decode-into class json))))
 
