@@ -173,7 +173,7 @@
                              (setf (slot-value object slot-name)
                                    (cond
                                     ((subtypep slot-type 'keyword)
-                                     (intern (second prop) :keyword))
+                                     (and (second prop) (intern (second prop) :keyword)))
                                     ((subtypep slot-type 'standard-object)
                                      (decode-into slot-type (second prop)))
                                     (t
