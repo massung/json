@@ -23,6 +23,9 @@
 (defpackage :json
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
+   #:json-object-members
+
+   ;; decoding and encoding functions
    #:json-decode
    #:json-decode-into
    #:json-encode
@@ -30,8 +33,9 @@
 
 (in-package :json)
 
-(defvar *json-object* nil
-  "A standard-object class name to decode an object into.")
+(defclass json-object ()
+  ((members :initform nil :initarg :members :accessor json-object-members))
+  (:documentation "A differentiation between a list and an object."))
 
 (deflexer json-lexer
   ("[%s%n]+"                  :next-token)
@@ -108,8 +112,10 @@
    `())
  
   ;; objects
-  ((object :object :end-object) ())
-  ((object :object members) $2)
+  ((object :object :end-object)
+   (make-instance 'json-object))
+  ((object :object members) 
+   (make-instance 'json-object :members $2))
 
   ;; members of an object
   ((members string :colon value :comma members)
@@ -118,10 +124,8 @@
    `((,$1 ,$3)))
   
   ;; arrays
-  ((array :array :end-array)
-   #())
-  ((array :array elements)
-   (coerce $2 'vector))
+  ((array :array :end-array) ())
+  ((array :array elements) $2)
 
   ;; elements of an array
   ((elements value :comma elements)
@@ -151,13 +155,13 @@
   "Create an instance of class and assoc all slots."
   (labels ((decode-into (class value)
              (cond
-              ((vectorp value)
-               (map 'vector #'(lambda (i) (decode-into class i)) value))
+              ((listp value)
+               (mapcar #'(lambda (i) (decode-into class i)) value))
+              ((subtypep class 'keyword)
+               (intern (string-upcase value) :keyword))
               ((null value)
-               (make-instance class))
-              ((atom value)
-               (error "~a is not of type ~a." value class))
-              (t
+               ())
+              ((typep value 'json-object)
                (let ((object (make-instance class)))
                  (loop :for slot :in (class-slots (class-of object))
 
@@ -169,15 +173,14 @@
                        :finally (return object)
 
                        ;; decode into the slot from the member values
-                       :do (when-let (prop (assoc slot-name value :test #'string=))
+                       :do (when-let (prop (assoc slot-name (json-object-members value) :test #'string=))
                              (setf (slot-value object slot-name)
-                                   (cond
-                                    ((subtypep slot-type 'keyword)
-                                     (and (second prop) (intern (second prop) :keyword)))
-                                    ((subtypep slot-type 'standard-object)
-                                     (decode-into slot-type (second prop)))
-                                    (t
-                                     (second prop)))))))))))
+                                   (if (or (subtypep slot-type 'standard-object)
+                                           (subtypep slot-type 'keyword))
+                                       (decode-into slot-type (second prop))
+                                     (second prop)))))))
+              (t
+               (error "~a is not of type ~a" value class)))))
     (when-let (json (json-decode string source))
       (decode-into class json))))
 

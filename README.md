@@ -12,10 +12,13 @@ To convert from JSON to a Lisp object use `JSON-DECODE`.
 
 The two parameters are the same parameters that the `tokenize` function takes in the `lexer` package.
 
-JSON arrays are decoded as Lisp vectors and JSON objects are decoded into associative lists. The JSON literals `true`, `false`, and `null` are decoded as the list keywords `t`, `nil`, and `:NULL`. All other JSON values should translate directly.
+JSON arrays are decoded as Lisp lists and JSON objects are decoded into a `JSON-OBJECT`, which has a single slot: `json-object-member`, an associative list. The JSON literals `true`, `false`, and `null` are decoded as the list keywords `t`, `nil`, and `nil`. All other JSON values should translate directly.
 
 	CL-USER > (json-decode "{\"test\": [1,-4e+3,true]}")
-	(("test" #(1 -4000 T)))
+	#<JSON::JSON-OBJECT 224959A7>
+
+	CL-USER > (json-object-members *)
+	(("test" (1 -4000 T)))
 
 ## Decoding Into a CLOS Object
 
@@ -38,13 +41,13 @@ For example:
 Now we have defined two classes: `login` and `account`, where an `account` contains a `login`. Using `json-decode-into`, we can take decode JSON directly into a CLOS object instance.
 
 	CL-USER > (json-decode-into 'account "[{\"login\":{\"user\":\"jeff\"}},{\"login\":{\"user\":\"mark\", \"pass\":\"kd93\"}}]")
-	#(#<ACCOUNT 21F97D1B> #<ACCOUNT 21F97D03>)
+	(#<ACCOUNT 21F97D1B> #<ACCOUNT 21F97D03>)
 
-Notice how since the JSON was an array, we got back an array of `account` objects. And, if we look inside, we'll see that since the `|login|` slot was declared with `:type login`, it was further decoded as well.
+Notice how since the JSON was an array, we got back a list of `account` objects. And, if we look inside, we'll see that since the `|login|` slot was declared with `:type login`, it was further decoded as well.
 
 The symbol name of each slot in a class is what's used to decode into an object instance. The `assoc` is performed with `:test #'string=`. This means it's probably better to use `|symbol|` symbols to clearly get the case sensitivity that is desired for each slot name.
 
-*NOTE: If your class is `subtypep` of `condition` then `json-decode-into` will use `make-condition` instead of `make-instance` to create your object.*
+*NOTE: If your class is `subtypep` of `keyword` then `json-decode-into` will intern a keyword from a string.*
 
 ## Encoding to JSON
 
