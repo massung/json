@@ -173,12 +173,16 @@
                        :finally (return object)
 
                        ;; decode into the slot from the member values
-                       :do (when-let (prop (assoc slot-name (json-object-members value) :test #'string=))
-                             (setf (slot-value object slot-name)
-                                   (if (or (subtypep slot-type 'standard-object)
-                                           (subtypep slot-type 'keyword))
-                                       (decode-into slot-type (second prop))
-                                     (second prop)))))))
+                       :do (let ((prop (assoc slot-name (json-object-members value) :test #'string=)))
+                             (if prop
+                                 (setf (slot-value object slot-name)
+                                       (if (or (subtypep slot-type 'standard-object)
+                                               (subtypep slot-type 'keyword))
+                                           (decode-into slot-type (second prop))
+                                         (second prop)))
+                               (when (subtypep slot-type 'standard-object)
+                                 (setf (slot-value object slot-name)
+                                       (make-instance slot-type))))))))
               (t
                (error "~a is not of type ~a" value class)))))
     (when-let (json (json-decode string source))
@@ -227,6 +231,10 @@
             (t
              (string c)))))
     (format t "~<\"~{~a~}\"~>" (map 'list #'encode-char value))))
+
+(defmethod json-encode-into ((value pathname) &optional (*standard-output* *standard-output*))
+  "Encode a pathname as a stream."
+  (json-encode-into (namestring value) *standard-output*))
 
 (defmethod json-encode-into ((value vector) &optional (*standard-output* *standard-output*))
   "Encode an array to a stream."
