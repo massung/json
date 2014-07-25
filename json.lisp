@@ -162,27 +162,39 @@
               ((null value)
                ())
               ((typep value 'json-object)
-               (let ((object (make-instance class)))
-                 (loop :for slot :in (class-slots (class-of object))
+               (if (eq class 'cl:hash-table)
+                   (loop :with ht := (make-hash-table :test 'equal)
 
-                       ;; use the name and type of the slot
-                       :for slot-name := (slot-definition-name slot)
-                       :for slot-type := (slot-definition-type slot)
+                         ;; loop over each member in the object
+                         :for (k v) :in (json-object-members value)
 
-                       ;; return the object when done decoding
-                       :finally (return object)
-
-                       ;; decode into the slot from the member values
-                       :do (let ((prop (assoc slot-name (json-object-members value) :test #'string=)))
-                             (if prop
-                                 (setf (slot-value object slot-name)
-                                       (if (or (subtypep slot-type 'standard-object)
-                                               (subtypep slot-type 'keyword))
-                                           (decode-into slot-type (second prop))
-                                         (second prop)))
-                               (when (subtypep slot-type 'standard-object)
-                                 (setf (slot-value object slot-name)
-                                       (make-instance slot-type))))))))
+                         ;; add a k/v pair to the hash table
+                         :do (setf (gethash k ht) v)
+                         
+                         ;; return the hash table
+                         :finally (return ht))
+                 (let ((object (make-instance class)))
+                   (loop :for slot :in (class-slots (class-of object))
+                         
+                         ;; use the name and type of the slot
+                         :for slot-name := (slot-definition-name slot)
+                         :for slot-type := (slot-definition-type slot)
+                         
+                         ;; return the object when done decoding
+                         :finally (return object)
+                         
+                         ;; decode into the slot from the member values
+                         :do (let ((prop (assoc slot-name (json-object-members value) :test #'string=)))
+                               (if prop
+                                   (setf (slot-value object slot-name)
+                                         (if (or (subtypep slot-type 'standard-object)
+                                                 (subtypep slot-type 'keyword)
+                                                 (subtypep slot-type 'hash-table))
+                                             (decode-into slot-type (second prop))
+                                           (second prop)))
+                                 (when (subtypep slot-type 'standard-object)
+                                   (setf (slot-value object slot-name)
+                                         (make-instance slot-type)))))))))
               (t
                (error "~a is not of type ~a" value class)))))
     (when-let (json (json-decode string source))
