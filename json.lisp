@@ -162,11 +162,11 @@
               ((null value)
                ())
               ((typep value 'json-object)
-               (cond ((eq class 'cl:list)
+               (cond ((subtypep class 'cl:list)
                       (json-object-members value))
 
                      ;; construct a hash table from the object members
-                     ((eq class 'cl:hash-table)
+                     ((subtypep class 'cl:hash-table)
                       (loop :with ht := (make-hash-table :test 'equal)
                             
                             ;; loop over each member in the object
@@ -195,7 +195,8 @@
                                           (setf (slot-value object slot-name)
                                                 (if (or (subtypep slot-type 'standard-object)
                                                         (subtypep slot-type 'keyword)
-                                                        (subtypep slot-type 'hash-table))
+                                                        (subtypep slot-type 'hash-table)
+                                                        (subtypep slot-type 'list))
                                                     (decode-into slot-type (second prop))
                                                   (second prop)))
                                         (when (subtypep slot-type 'standard-object)
