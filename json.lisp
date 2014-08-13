@@ -163,7 +163,10 @@
                ())
               ((typep value 'json-object)
                (cond ((subtypep class 'cl:list)
-                      (json-object-members value))
+                      (loop :for (k v) :in (json-object-members value)
+                            :collect (if (typep v 'json-object)
+                                         (list k (decode-into 'cl:list v))
+                                       (list k v))))
 
                      ;; construct a hash table from the object members
                      ((subtypep class 'cl:hash-table)
@@ -173,7 +176,9 @@
                             :for (k v) :in (json-object-members value)
                             
                             ;; add a k/v pair to the hash table
-                            :do (setf (gethash k ht) v)
+                            :do (setf (gethash k ht) (if (typep v 'json-object)
+                                                         (decode-into 'cl:hash-table v)
+                                                       v))
                             
                             ;; return the hash table
                             :finally (return ht)))
