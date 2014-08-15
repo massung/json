@@ -23,6 +23,7 @@
 (defpackage :json
   (:use :cl :lw :hcl :parsergen :re :lexer)
   (:export
+   #:json-object
    #:json-object-members
 
    ;; decoding and encoding functions
@@ -153,14 +154,14 @@
 
 (defun json-decode-into (class string &optional source)
   "Create an instance of class and assoc all slots."
-  (labels ((decode-into (class value)
+  (labels ((decode-into (class value &optional assert-type-p)
              (cond
+              ((stringp value)
+               (if (subtypep class 'cl:keyword)
+                   (intern (string-upcase value) :keyword)
+                 value))
               ((listp value)
                (mapcar #'(lambda (i) (decode-into class i)) value))
-              ((subtypep class 'keyword)
-               (intern (string-upcase value) :keyword))
-              ((null value)
-               ())
               ((typep value 'json-object)
                (cond ((subtypep class 'cl:list)
                       (loop :for (k v) :in (json-object-members value)
@@ -207,11 +208,10 @@
                                         (when (subtypep slot-type 'standard-object)
                                           (setf (slot-value object slot-name)
                                                 (make-instance slot-type))))))))))
-
-              ;; type error (e.g. decoding "true" into a hash table)
-              (t (error "~a is not of type ~a" value class)))))
-    (when-let (json (json-decode string source))
-      (decode-into class json))))
+              (t (if (or (not assert-type-p) (subtypep (type-of value) class))
+                     value
+                   (warn "~s is not of type ~a" value class))))))
+    (decode-into class (json-decode string source) t)))
 
 (defun json-encode (value)
   "Encodes a Lisp value into a string."
@@ -323,7 +323,7 @@
     (flet ((bound (slot)
              (slot-boundp value (slot-definition-name slot))))
       (let ((bound-slots (remove-if-not #'bound (class-slots (class-of value)))))
-        (pprint-logical-block (*standard-output* bound-slots  :prefix "{" :suffix "}")
+        (pprint-logical-block (*standard-output* bound-slots :prefix "{" :suffix "}")
           (pprint-exit-if-list-exhausted)
           (loop (let ((name (slot-definition-name (pprint-pop))))
                   (json-encode-into name)
@@ -333,3 +333,26 @@
                   (write-char #\,)
                   (pprint-newline :mandatory)
                   (pprint-indent :current 0))))))))
+
+(defmethod json-encode-into ((value json-object) &optional (*standard-output* *standard-output*))
+  "Encode a JSON object with an associative list of members to a stream."
+  (let ((*print-pretty* t)
+        (*print-level* nil)
+        (*print-length* nil)
+        (*print-lines* nil)
+        (*print-right-margin* 72))
+    (pprint-logical-block (*standard-output* (json-object-members value) :prefix "{" :suffix "}")
+      (pprint-exit-if-list-exhausted)
+      (loop (let ((kv-pair (pprint-pop)))
+              (destructuring-bind (k v)
+                  kv-pair
+                (if (not (stringp k))
+                    (warn "~a is not a valid JSON key; skipping...~%" k)
+                  (progn
+                    (json-encode-into k)
+                    (write-char #\:)
+                    (json-encode-into v)
+                    (pprint-exit-if-list-exhausted)
+                    (write-char #\,)
+                    (pprint-newline :mandatory)
+                    (pprint-indent :current 0)))))))))

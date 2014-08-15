@@ -47,7 +47,32 @@ Notice how since the JSON was an array, we got back a list of `account` objects.
 
 The symbol name of each slot in a class is what's used to decode into an object instance. The `assoc` is performed with `:test #'string=`. This means it's probably better to use `|symbol|` symbols to clearly get the case sensitivity that is desired for each slot name.
 
-*NOTE: If your class is `subtypep` of `keyword` then `json-decode-into` will intern a keyword from a string.*
+## Decoding Into Core Classes
+
+There are a few "special" classes that are handled uniquely:
+
+* `KEYWORD`
+
+The incoming JSON value should be a string. It will be up-cased and interned into the `keyword` package.
+
+	CL-USER > (json-decode-into 'keyword "\"hello\"")
+	:HELLO
+
+* `LIST`
+
+If the incoming JSON value is a `json-object`, and all the members are returned as an a-list. Any values in the a-list that are also objects will be recursively returned as a-lists as well.
+
+	CL-USER > (json-decode-into 'list "{\"a\":{\"b\":10}}")
+	(("a" (("b" 10))))
+
+* `HASH-TABLE`
+
+The JSON value should be a `json-object` and all the key/value pairs will be returned in a new `hash-table` of type `EQUAL`. Any child values that are objects will also be compiled into hash tables.
+
+	CL-USER > (json-decode-into 'hash-table "{\"a\":{\"b\":10}}")
+	#<EQUAL Hash Table{1} 21E4D39F>
+
+*Note: When using `json-decode-into`, if the object that would be returned is not of the type you requested, and error will be signaled.*
 
 ## Encoding to JSON
 
