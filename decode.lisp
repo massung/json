@@ -61,7 +61,7 @@
                                 
         ;; return the object when done decoding
         :finally (return object)
-                                
+        
         ;; decode into the slot from the member values
         :do (let ((prop (assoc slot-name (json-object-members value) :test #'string=)))
               (if prop
@@ -73,7 +73,9 @@
 
 (defmethod json-decode-object-into (class (value json-object))
   "Decode a JSON object into a new instance of class."
-  (json-decode-object-into (make-instance class) value))
+  (if (subtypep class 'standard-object)
+      (json-decode-object-into (make-instance class) value)
+    (json-decode-object-into class value)))
 
 (defmethod json-decode-object-into ((class (eql t)) (value json-object))
   "Identity."
