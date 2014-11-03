@@ -35,8 +35,12 @@
   (intern (string-upcase value) :keyword))
 
 (defmethod json-decode-object-into ((class (eql 'cl:list)) (value json-object))
-  "Return the members from a JSON object in an associativee list."
+  "Return the members from a JSON object in an associative list."
   (loop :for (k v) :in (json-object-members value) :collect (list k v)))
+
+(defmethod json-decode-object-into ((class (eql 'cl:hash-table)) (value (eql nil)))
+  "Return an empty hash table."
+  (make-hash-table :test 'equal))
 
 (defmethod json-decode-object-into ((class (eql 'cl:hash-table)) (value json-object))
   "Return the members of a JSON object in a hash table."
