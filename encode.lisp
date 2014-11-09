@@ -106,13 +106,18 @@
       (pprint-logical-block (*standard-output* keys :prefix "{" :suffix "}")
         (pprint-exit-if-list-exhausted)
         (loop (let ((key (pprint-pop)))
-                (json-encode-into (string key))
-                (write-char #\:)
-                (json-encode-into (gethash key value))
-                (pprint-exit-if-list-exhausted)
-                (write-char #\,)
-                (pprint-newline :mandatory)
-                (pprint-indent :current 0)))))))
+                (if (not (stringp key))
+                    (progn
+                      (warn "~s is not a valid JSON key; skipping...~%" key)
+                      (pprint-exit-if-list-exhausted))
+                  (progn
+                    (json-encode-into key)
+                    (write-char #\:)
+                    (json-encode-into (gethash key value))
+                    (pprint-exit-if-list-exhausted)
+                    (write-char #\,)
+                    (pprint-newline :mandatory)
+                    (pprint-indent :current 0)))))))))
 
 (defmethod json-encode-into ((value standard-object) &optional (*standard-output* *standard-output*))
   "Encode any class with slots to a stream."
@@ -148,7 +153,9 @@
               (destructuring-bind (k v)
                   kv-pair
                 (if (not (stringp k))
-                    (warn "~a is not a valid JSON key; skipping...~%" k)
+                    (progn
+                      (warn "~s is not a valid JSON key; skipping...~%" k)
+                      (pprint-exit-if-list-exhausted))
                   (progn
                     (json-encode-into k)
                     (write-char #\:)
