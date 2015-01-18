@@ -30,6 +30,10 @@
   "An array of values, decode them all."
   (loop :for i :in value :collect (json-decode-object-into class i)))
 
+(defmethod json-decode-object-into ((class (eql 'cl:pathname)) (value string))
+  "A string should be decoded into a pathname."
+  (pathname value))
+
 (defmethod json-decode-object-into ((class (eql 'cl:keyword)) (value string))
   "Decode a JSON string into a keyword."
   (intern (string-upcase value) :keyword))
