@@ -54,10 +54,10 @@
   ("\""                       (push-lexer #'string-lexer :string))
 
   ;; number constants
-  ("[+%-]?%d+%.%d+e[+%-]?%d+" (values :float (parse-float $$)))
-  ("[+%-]?%d+%.%d+"           (values :float (parse-float $$)))
-  ("[+%-]?%d+e[+%-]?%d+"      (values :int (truncate (parse-float $$))))
-  ("[+%-]?%d+"                (values :int (parse-integer $$)))
+  ("[+-]?%d+%.%d+e[+-]?%d+"   (values :float (parse-float $$)))
+  ("[+-]?%d+%.%d+"            (values :float (parse-float $$)))
+  ("[+-]?%d+e[+-]?%d+"        (values :int (truncate (parse-float $$))))
+  ("[+-]?%d+"                 (values :int (parse-integer $$)))
 
   ;; identifier constants
   ("%a%w*"                    (cond
@@ -95,6 +95,7 @@
   ((value :true) t)
   ((value :false) nil)
   ((value :null) nil)
+  ((value :float) $1)
   ((value :int) $1)
   ((value string) $1)
   ((value array) $1)
