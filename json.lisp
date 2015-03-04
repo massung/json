@@ -53,10 +53,12 @@
   ;; strings use a different lexer
   ("\""                       (push-lexer #'string-lexer :string))
 
-  ;; number constants
+  ;; float constants
   ("[+-]?%d+%.%d+e[+-]?%d+"   (values :float (parse-float $$)))
   ("[+-]?%d+%.%d+"            (values :float (parse-float $$)))
-  ("[+-]?%d+e[+-]?%d+"        (values :int (truncate (parse-float $$))))
+  ("[+-]?%d+e[+-]?%d+"        (values :float (parse-float $$)))
+
+  ;; integer constants
   ("[+-]?%d+"                 (values :int (parse-integer $$)))
 
   ;; identifier constants
