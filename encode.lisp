@@ -72,12 +72,12 @@
     (pprint-logical-block (*standard-output* nil :prefix "[" :suffix "]")
       (when (plusp (length value))
         (json-encode-into (aref value 0)))
-      (loop :for i :from 1 :below (length value)
-            :do (progn
-                  (write-char #\,)
-                  (pprint-newline :fill)
-                  (pprint-indent :block 0)
-                  (json-encode-into (aref value i)))))))
+      (loop for i from 1 below (length value)
+            do (progn
+                 (write-char #\,)
+                 (pprint-newline :fill)
+                 (pprint-indent :block 0)
+                 (json-encode-into (aref value i)))))))
 
 (defmethod json-encode-into ((value list) &optional (*standard-output* *standard-output*))
   "Encode a list to a stream."
@@ -102,7 +102,7 @@
         (*print-length* nil)
         (*print-lines* nil)
         (*print-right-margin* 72))
-    (let ((keys (loop :for key :being :each hash-keys :in value :collect key)))
+    (let ((keys (loop for key being each hash-keys in value collect key)))
       (pprint-logical-block (*standard-output* keys :prefix "{" :suffix "}")
         (pprint-exit-if-list-exhausted)
         (loop (let ((key (pprint-pop)))

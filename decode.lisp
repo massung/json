@@ -28,7 +28,7 @@
 
 (defmethod json-decode-object-into (class (value cl:list))
   "An array of values, decode them all."
-  (loop :for i :in value :collect (json-decode-object-into class i)))
+  (loop for i in value collect (json-decode-object-into class i)))
 
 (defmethod json-decode-object-into ((class (eql 'cl:pathname)) (value string))
   "A string should be decoded into a pathname."
@@ -40,7 +40,7 @@
 
 (defmethod json-decode-object-into ((class (eql 'cl:list)) (value json-object))
   "Return the members from a JSON object in an associative list."
-  (loop :for (k v) :in (json-object-members value) :collect (list k v)))
+  (loop for (k v) in (json-object-members value) collect (list k v)))
 
 (defmethod json-decode-object-into ((class (eql 'cl:hash-table)) (value (eql nil)))
   "Return an empty hash table."
@@ -48,36 +48,36 @@
 
 (defmethod json-decode-object-into ((class (eql 'cl:hash-table)) (value json-object))
   "Return the members of a JSON object in a hash table."
-  (loop :with ht := (make-hash-table :test 'equal)
+  (loop with ht = (make-hash-table :test 'equal)
                             
         ;; loop over each member in the object
-        :for (k v) :in (json-object-members value)
-                            
+        for (k v) in (json-object-members value)
+        
         ;; add a k/v pair to the hash table
-        :do (setf (gethash k ht) v)
+        do (setf (gethash k ht) v)
         
         ;; return the hash table
-        :finally (return ht)))
+        finally (return ht)))
 
 (defmethod json-decode-object-into ((object standard-object) (value json-object))
   "Decode the members of a JSON object into the slots of a CLOS object."
-  (loop :for slot :in (class-slots (class-of object))
+  (loop for slot in (class-slots (class-of object))
                                 
         ;; use the name and type of the slot
-        :for slot-name := (slot-definition-name slot)
-        :for slot-type := (slot-definition-type slot)
+        for slot-name = (slot-definition-name slot)
+        for slot-type = (slot-definition-type slot)
                                 
         ;; return the object when done decoding
-        :finally (return object)
+        finally (return object)
         
         ;; decode into the slot from the member values
-        :do (let ((prop (assoc slot-name (json-object-members value) :test #'string=)))
-              (if prop
-                  (setf (slot-value object slot-name)
-                        (json-decode-object-into slot-type (second prop)))
-                (when (subtypep slot-type 'standard-object)
-                  (setf (slot-value object slot-name)
-                        (make-instance slot-type)))))))
+        do (let ((prop (assoc slot-name (json-object-members value) :test #'string=)))
+             (if prop
+                 (setf (slot-value object slot-name)
+                       (json-decode-object-into slot-type (second prop)))
+               (when (subtypep slot-type 'standard-object)
+                 (setf (slot-value object slot-name)
+                       (make-instance slot-type)))))))
 
 (defmethod json-decode-object-into (class (value json-object))
   "Decode a JSON object into a new instance of class."

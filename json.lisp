@@ -110,7 +110,7 @@
   ;; quoted string
   ((string :string chars)
    (with-output-to-string (s nil :element-type 'lw:simple-char)
-     (loop :for c :in $2 :do (princ c s))))
+     (loop for c in $2 do (princ c s))))
 
   ;; character sequences
   ((chars :chars chars)
