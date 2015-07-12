@@ -37,11 +37,15 @@
 
 (in-package :json)
 
+;;; ----------------------------------------------------
+
 (defclass json-object ()
   ((members :initform nil :initarg :members :accessor json-object-members))
   (:documentation "A differentiation between a list and an object."))
 
-(deflexer json-lexer
+;;; ----------------------------------------------------
+
+(deflexer json-lexer (s)
   ("[%s%n]+"                  :next-token)
   ("{"                        :object)
   ("}"                        :end-object)
@@ -51,7 +55,7 @@
   (","                        :comma)
 
   ;; strings use a different lexer
-  ("\""                       (push-lexer #'string-lexer :string))
+  ("\""                       (push-lexer s #'string-lexer :string))
 
   ;; float constants
   ("[+-]?%d+%.%d+e[+-]?%d+"   (values :float (parse-float $$)))
@@ -62,15 +66,12 @@
   ("[+-]?%d+"                 (values :int (parse-integer $$)))
 
   ;; identifier constants
-  ("%a%w*"                    (cond
-                               ((string= $$ "true") :true)
-                               ((string= $$ "false") :false)
-                               ((string= $$ "null") :null)
-                               (t
-                                (error "Unknown identifier ~s" $$)))))
+  ("%a%w*"                    (values :identifier $$)))
 
-(deflexer string-lexer
-  ("\""                       (pop-lexer :end-string))
+;;; ----------------------------------------------------
+
+(deflexer string-lexer (s)
+  ("\""                       (pop-lexer s :end-string))
 
   ;; escaped characters
   ("\\n"                      (values :chars #\newline))
@@ -90,15 +91,15 @@
   ;; don't reach the end of file or line
   ("$"                        (error "Unterminated string")))
 
+;;; ----------------------------------------------------
+
 (defparser json-parser
   ((start value) $1)
 
   ;; numerics, strings, arrays, and objects
-  ((value :true) t)
-  ((value :false) nil)
-  ((value :null) nil)
   ((value :float) $1)
   ((value :int) $1)
+  ((value identifier) $1)
   ((value string) $1)
   ((value array) $1)
   ((value object) $1)
@@ -106,6 +107,13 @@
   ;; unparsable values
   ((value :error)
    (error "JSON syntax error"))
+
+  ;; keyword identifiers
+  ((identifier :identifier)
+   (cond ((string= $1 "true") t)
+         ((string= $1 "false") nil)
+         ((string= $1 "null") nil)
+         (t (error "Unknown identifier"))))
 
   ;; quoted string
   ((string :string chars)
@@ -140,27 +148,19 @@
   ((elements value :end-array)
    `(,$1)))
 
-(defparser string-parser
-  ((start string) $1)
-
-  ;; convert a list of characters to a string
-  ((string chars)
-   (coerce $1 'lw:text-string))
-
-  ;; collect a list of characters
-  ((chars :char chars)
-   `(,$1 ,@$2))
-  ((chars)
-   `()))
+;;; ----------------------------------------------------
 
 (defun json-decode (string &optional source)
   "Convert a JSON string into a Lisp object."
-  (let ((tokens (tokenize #'json-lexer string source)))
-    (parse #'json-parser tokens)))
+  (parse #'json-parser #'json-lexer string source))
+
+;;; ----------------------------------------------------
 
 (defun json-decode-into (class string &optional source)
   "Create an instance of class and assoc all slots."
   (json-decode-object-into class (json-decode string source)))
+
+;;; ----------------------------------------------------
 
 (defun json-encode (value)
   "Encodes a Lisp value into a string."

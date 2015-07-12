@@ -19,6 +19,8 @@
 
 (in-package :json)
 
+;;; ----------------------------------------------------
+
 (defmethod json-decode-object-into (class value)
   "Only success if value is a type of class."
   (prog1
@@ -26,25 +28,37 @@
     (unless (typep value class)
       (warn "~s is not of type ~a" value class))))
 
+;;; ----------------------------------------------------
+
 (defmethod json-decode-object-into (class (value cl:list))
   "An array of values, decode them all."
   (loop for i in value collect (json-decode-object-into class i)))
+
+;;; ----------------------------------------------------
 
 (defmethod json-decode-object-into ((class (eql 'cl:pathname)) (value string))
   "A string should be decoded into a pathname."
   (pathname value))
 
+;;; ----------------------------------------------------
+
 (defmethod json-decode-object-into ((class (eql 'cl:keyword)) (value string))
   "Decode a JSON string into a keyword."
   (intern (string-upcase value) :keyword))
+
+;;; ----------------------------------------------------
 
 (defmethod json-decode-object-into ((class (eql 'cl:list)) (value json-object))
   "Return the members from a JSON object in an associative list."
   (loop for (k v) in (json-object-members value) collect (list k v)))
 
+;;; ----------------------------------------------------
+
 (defmethod json-decode-object-into ((class (eql 'cl:hash-table)) (value (eql nil)))
   "Return an empty hash table."
   (make-hash-table :test 'equal))
+
+;;; ----------------------------------------------------
 
 (defmethod json-decode-object-into ((class (eql 'cl:hash-table)) (value json-object))
   "Return the members of a JSON object in a hash table."
@@ -58,6 +72,8 @@
         
         ;; return the hash table
         finally (return ht)))
+
+;;; ----------------------------------------------------
 
 (defmethod json-decode-object-into ((object standard-object) (value json-object))
   "Decode the members of a JSON object into the slots of a CLOS object."
@@ -79,11 +95,15 @@
                  (setf (slot-value object slot-name)
                        (make-instance slot-type)))))))
 
+;;; ----------------------------------------------------
+
 (defmethod json-decode-object-into (class (value json-object))
   "Decode a JSON object into a new instance of class."
   (if (subtypep class 'standard-object)
       (json-decode-object-into (make-instance class) value)
     (json-decode-object-into class value)))
+
+;;; ----------------------------------------------------
 
 (defmethod json-decode-object-into ((class (eql t)) (value json-object))
   "Identity."

@@ -19,27 +19,39 @@
 
 (in-package :json)
 
+;;; ----------------------------------------------------
+
 (defmethod json-encode-into ((value (eql t)) &optional (*standard-output* *standard-output*))
   "Encode the true value."
   (declare (ignore value))
   (format t "~<true~>"))
+
+;;; ----------------------------------------------------
 
 (defmethod json-encode-into ((value (eql nil)) &optional (*standard-output* *standard-output*))
   "Encode the null constant."
   (declare (ignore value))
   (format t "~<null~>"))
 
+;;; ----------------------------------------------------
+
 (defmethod json-encode-into ((value symbol) &optional (*standard-output* *standard-output*))
   "Encode a symbol to a stream."
   (json-encode-into (symbol-name value)))
+
+;;; ----------------------------------------------------
 
 (defmethod json-encode-into ((value number) &optional (*standard-output* *standard-output*))
   "Encode a number to a stream."
   (format t "~<~a~>" value))
 
+;;; ----------------------------------------------------
+
 (defmethod json-encode-into ((value ratio) &optional (*standard-output* *standard-output*))
   "Encode a ratio to a stream."
   (format t "~<~a~>" (float value)))
+
+;;; ----------------------------------------------------
 
 (defmethod json-encode-into ((value string) &optional (*standard-output* *standard-output*))
   "Encode a string as a stream."
@@ -58,9 +70,13 @@
              (string c)))))
     (format t "~<\"~{~a~}\"~>" (map 'list #'encode-char value))))
 
+;;; ----------------------------------------------------
+
 (defmethod json-encode-into ((value pathname) &optional (*standard-output* *standard-output*))
   "Encode a pathname as a stream."
   (json-encode-into (namestring value) *standard-output*))
+
+;;; ----------------------------------------------------
 
 (defmethod json-encode-into ((value vector) &optional (*standard-output* *standard-output*))
   "Encode an array to a stream."
@@ -79,6 +95,8 @@
                  (pprint-indent :block 0)
                  (json-encode-into (aref value i)))))))
 
+;;; ----------------------------------------------------
+
 (defmethod json-encode-into ((value list) &optional (*standard-output* *standard-output*))
   "Encode a list to a stream."
   (let ((*print-pretty* t)
@@ -94,6 +112,8 @@
               (write-char #\,)
               (pprint-newline :fill)
               (pprint-indent :block 0))))))
+
+;;; ----------------------------------------------------
 
 (defmethod json-encode-into ((value hash-table) &optional (*standard-output* *standard-output*))
   "Encode a hash-table to a stream."
@@ -119,6 +139,8 @@
                     (pprint-newline :mandatory)
                     (pprint-indent :current 0)))))))))
 
+;;; ----------------------------------------------------
+
 (defmethod json-encode-into ((value standard-object) &optional (*standard-output* *standard-output*))
   "Encode any class with slots to a stream."
   (let ((*print-pretty* t)
@@ -139,6 +161,8 @@
                   (write-char #\,)
                   (pprint-newline :mandatory)
                   (pprint-indent :current 0))))))))
+
+;;; ----------------------------------------------------
 
 (defmethod json-encode-into ((value json-object) &optional (*standard-output* *standard-output*))
   "Encode a JSON object with an associative list of members to a stream."
