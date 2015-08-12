@@ -1,6 +1,6 @@
-;;;; JSON parser for LispWorks
+;;;; JSON parser for Common Lisp
 ;;;;
-;;;; Copyright (c) 2012 by Jeffrey Massung
+;;;; Copyright (c) Jeffrey Massung
 ;;;;
 ;;;; This file is provided to you under the Apache License,
 ;;;; Version 2.0 (the "License"); you may not use this file
@@ -17,152 +17,179 @@
 ;;;; under the License.
 ;;;;
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (require "parsergen"))
-
 (defpackage :json
-  (:use :cl :lw :hcl :parsergen :re :lexer)
+  (:use :cl :re :lexer :parse)
   (:export
+   #:json-decode
+   #:json-encode
+
+   ;; parsed json objects
    #:json-object
    #:json-object-members
 
-   ;; decoding functions
-   #:json-decode
-   #:json-decode-into
-   #:json-decode-object-into
-
-   ;; encoding functions
-   #:json-encode
-   #:json-encode-into))
+   ;; json object member accessor
+   #:json-getf
+   #:json-setf))
 
 (in-package :json)
 
 ;;; ----------------------------------------------------
 
 (defclass json-object ()
-  ((members :initform nil :initarg :members :accessor json-object-members))
-  (:documentation "A differentiation between a list and an object."))
+  ((members :initform nil
+            :initarg :members
+            :accessor json-object-members))
+  (:documentation "An associative list of key/value pairs."))
+
+;;; ----------------------------------------------------
+
+(defmethod print-object ((obj json-object) stream)
+  "Output a JSON object to a stream in readable form."
+  (print-unreadable-object (obj stream :type t)
+    (let ((*print-level* 1))
+      (json-encode obj stream))))
+
+;;; ----------------------------------------------------
+
+(defun json-getf (object key &optional value)
+  "Find an member's value in a JSON object."
+  (let ((place (assoc key (json-object-members object) :test 'string=)))
+    (if (null place)
+        value
+      (values (second place) t))))
+
+;;; ----------------------------------------------------
+
+(defun json-setf (object key value)
+  "Assign a value to a key in a JSON object."
+  (let ((place (assoc key (json-object-members object) :test 'string=)))
+    (prog1 value
+      (if (null place)
+          (push (list key value) (json-object-members object))
+        (rplacd place (list value))))))
+
+;;; ----------------------------------------------------
+
+(defsetf json-getf json-setf)
 
 ;;; ----------------------------------------------------
 
 (deflexer json-lexer (s)
-  ("[%s%n]+"                  :next-token)
-  ("{"                        :object)
-  ("}"                        :end-object)
-  ("%["                       :array)
-  ("%]"                       :end-array)
-  (":"                        :colon)
-  (","                        :comma)
+  ("[%s%n]+" :next-token)
+  ("{"       :object)
+  ("}"       :end-object)
+  ("%["      :array)
+  ("%]"      :end-array)
+  (":"       :key)
+  (","       :comma)
 
   ;; strings use a different lexer
-  ("\""                       (push-lexer s #'string-lexer :string))
+  ("\""      (push-lexer s #'string-lexer :string))
 
-  ;; float constants
-  ("[+-]?%d+%.%d+e[+-]?%d+"   (values :float (parse-float $$)))
-  ("[+-]?%d+%.%d+"            (values :float (parse-float $$)))
-  ("[+-]?%d+e[+-]?%d+"        (values :float (parse-float $$)))
-
-  ;; integer constants
-  ("[+-]?%d+"                 (values :int (parse-integer $$)))
+  ;; numeric constants
+  ("[+-]?%d+(?%.%d+)?(?e[+-]?%d+)?"
+   (values :constant (read-from-string $$)))
 
   ;; identifier constants
-  ("%a%w*"                    (values :identifier $$)))
+  ("%a%w*"   (cond ((string= $$ "true")  (values :constant t))
+                   ((string= $$ "false") (values :constant nil))
+                   ((string= $$ "null")  (values :constant nil))
+
+                   ;; all other identifiers are invalid
+                   (t (error "Unknown JSON identifier ~s" $$)))))
 
 ;;; ----------------------------------------------------
 
 (deflexer string-lexer (s)
-  ("\""                       (pop-lexer s :end-string))
+  ("\""            (pop-lexer s :end-string))
 
   ;; escaped characters
-  ("\\n"                      (values :chars #\newline))
-  ("\\t"                      (values :chars #\tab))
-  ("\\f"                      (values :chars #\formfeed))
-  ("\\b"                      (values :chars #\backspace))
-  ("\\r"                      (values :chars #\return))
+  ("\\n"           (values :chars #\newline))
+  ("\\t"           (values :chars #\tab))
+  ("\\f"           (values :chars #\formfeed))
+  ("\\b"           (values :chars #\backspace))
+  ("\\r"           (values :chars #\return))
 
   ;; unicode characters
-  ("\\u(%x%x%x%x)"            (let ((n (parse-integer $1 :radix 16)))
-                                (values :chars (code-char n))))
+  ("\\u(%x%x%x%x)" (let ((n (parse-integer $1 :radix 16)))
+                     (values :chars (code-char n))))
 
   ;; all other characters
-  ("\\(.)"                    (values :chars $1))
-  ("[^\\\"]+"                 (values :chars $$))
+  ("\\(.)"         (values :chars $1))
+  ("[^\\\"]+"      (values :chars $$))
 
   ;; don't reach the end of file or line
-  ("$"                        (error "Unterminated string")))
+  ("$"             (error "Unterminated string")))
 
 ;;; ----------------------------------------------------
 
-(defparser json-parser
-  ((start value) $1)
+(defparser json-value
+  "Parse a single JSON value."
+  (.one-of 'json-constant
+           'json-string
+           'json-array
+           'json-object))
 
-  ;; numerics, strings, arrays, and objects
-  ((value :float) $1)
-  ((value :int) $1)
-  ((value identifier) $1)
-  ((value string) $1)
-  ((value array) $1)
-  ((value object) $1)
+;;; ----------------------------------------------------
 
-  ;; unparsable values
-  ((value :error)
-   (error "JSON syntax error"))
+(defparser json-constant
+  "Parse a literal JSON value."
+  (.is :constant))
 
-  ;; keyword identifiers
-  ((identifier :identifier)
-   (cond ((string= $1 "true") t)
-         ((string= $1 "false") nil)
-         ((string= $1 "null") nil)
-         (t (error "Unknown identifier"))))
+;;; ----------------------------------------------------
 
-  ;; quoted string
-  ((string :string chars)
-   (with-output-to-string (s nil :element-type 'lw:simple-char)
-     (loop for c in $2 do (princ c s))))
+(defparser json-string
+  "Parse a quoted string."
+  (>>= (>> (.is :string) (.many-until (.is :chars) (.is :end-string)))
+       (lambda (cs)
+         (.ret (format nil "~{~a~}" cs)))))
 
-  ;; character sequences
-  ((chars :chars chars)
-   `(,$1 ,@$2))
-  ((chars :end-string)
-   `())
- 
-  ;; objects
-  ((object :object :end-object)
-   (make-instance 'json-object))
-  ((object :object members) 
-   (make-instance 'json-object :members $2))
+;;; ----------------------------------------------------
 
-  ;; members of an object
-  ((members string :colon value :comma members)
-   `((,$1 ,$3) ,@$5))
-  ((members string :colon value :end-object)
-   `((,$1 ,$3)))
-  
-  ;; arrays
-  ((array :array :end-array) ())
-  ((array :array elements) $2)
+(defparser json-array
+  "Parse a list of values."
+  (.between (.is :array) (.is :end-array) 'json-values))
 
-  ;; elements of an array
-  ((elements value :comma elements)
-   `(,$1 ,@$3))
-  ((elements value :end-array)
-   `(,$1)))
+;;; ----------------------------------------------------
+
+(defparser json-values
+  "Parse values separated by commas."
+  (.sep-by 'json-value (.is :comma)))
+
+;;; ----------------------------------------------------
+
+(defparser json-object
+  "Parse a set of key/value pairs."
+  (>>= (.between (.is :object) (.is :end-object) 'json-members)
+       (lambda (ms)
+         (.ret (make-instance 'json-object :members ms)))))
+
+;;; ----------------------------------------------------
+
+(defparser json-members
+  "Key/value pairs separated by commas."
+  (.sep-by 'json-kv-pair (.is :comma)))
+
+;;; ----------------------------------------------------
+
+(defparser json-kv-pair
+  "A single key value pair."
+  (>>= 'json-string
+       (lambda (k)
+         (>>= (>> (.is :key) 'json-value)
+              (lambda (v)
+                (.ret (list k v)))))))
 
 ;;; ----------------------------------------------------
 
 (defun json-decode (string &optional source)
   "Convert a JSON string into a Lisp object."
-  (parse #'json-parser #'json-lexer string source))
+  (with-lexer (lexer 'json-lexer string :source source)
+    (with-token-reader (next-token lexer)
+      (parse 'json-value next-token))))
 
 ;;; ----------------------------------------------------
 
-(defun json-decode-into (class string &optional source)
-  "Create an instance of class and assoc all slots."
-  (json-decode-object-into class (json-decode string source)))
-
-;;; ----------------------------------------------------
-
-(defun json-encode (value)
-  "Encodes a Lisp value into a string."
-  (with-output-to-string (s)
-    (json-encode-into value s)))
+(defun json-encode (value &optional stream)
+  "Encodes a Lisp value into a stream."
+  (json-write value stream))

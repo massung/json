@@ -21,39 +21,39 @@
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value (eql t)) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value (eql t)) &optional stream)
   "Encode the true value."
   (declare (ignore value))
-  (format t "~<true~>"))
+  (format stream "~<true~>"))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value (eql nil)) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value (eql nil)) &optional stream)
   "Encode the null constant."
   (declare (ignore value))
-  (format t "~<null~>"))
+  (format stream "~<null~>"))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value symbol) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value symbol) &optional stream)
   "Encode a symbol to a stream."
-  (json-encode-into (symbol-name value)))
+  (json-write (symbol-name value) stream))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value number) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value number) &optional stream)
   "Encode a number to a stream."
-  (format t "~<~a~>" value))
+  (format stream "~<~a~>" value))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value ratio) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value ratio) &optional stream)
   "Encode a ratio to a stream."
-  (format t "~<~a~>" (float value)))
+  (format stream "~<~a~>" (float value)))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value string) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value string) &optional stream)
   "Encode a string as a stream."
   (flet ((encode-char (c)
            (cond
@@ -68,123 +68,101 @@
              (format nil "\\u~16,4,'0r" (char-code c)))
             (t
              (string c)))))
-    (format t "~<\"~{~a~}\"~>" (map 'list #'encode-char value))))
+    (format stream "~<\"~{~a~}\"~>" (map 'list #'encode-char value))))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value pathname) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value pathname) &optional stream)
   "Encode a pathname as a stream."
-  (json-encode-into (namestring value) *standard-output*))
+  (json-write (namestring value) stream))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value vector) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value vector) &optional stream)
   "Encode an array to a stream."
   (let ((*print-pretty* t)
-        (*print-level* nil)
         (*print-length* nil)
         (*print-lines* nil)
         (*print-right-margin* 72))
-    (pprint-logical-block (*standard-output* nil :prefix "[" :suffix "]")
+    (pprint-logical-block (stream nil :prefix "[" :suffix "]")
       (when (plusp (length value))
-        (json-encode-into (aref value 0)))
-      (loop for i from 1 below (length value)
-            do (progn
-                 (write-char #\,)
-                 (pprint-newline :fill)
-                 (pprint-indent :block 0)
-                 (json-encode-into (aref value i)))))))
+        (json-write (aref value 0)))
+      (loop
+         for i from 1 below (length value)
+         do (progn
+              (write-char #\, stream)
+              (pprint-newline :fill)
+              (pprint-indent :block 0)
+              (json-write (aref value i) stream))))))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value list) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value list) &optional stream)
   "Encode a list to a stream."
   (let ((*print-pretty* t)
-        (*print-level* nil)
         (*print-length* nil)
         (*print-lines* nil)
         (*print-right-margin* 72))
-    (pprint-logical-block (*standard-output* value :prefix "[" :suffix "]")
+    (pprint-logical-block (stream value :prefix "[" :suffix "]")
       (pprint-exit-if-list-exhausted)
-      (loop (progn
-              (json-encode-into (pprint-pop))
-              (pprint-exit-if-list-exhausted)
-              (write-char #\,)
-              (pprint-newline :fill)
-              (pprint-indent :block 0))))))
+      (loop
+         (json-write (pprint-pop) stream)
+         (pprint-exit-if-list-exhausted)
+         (write-char #\, stream)
+         (pprint-newline :fill)
+         (pprint-indent :block 0)))))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value hash-table) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value hash-table) &optional stream)
   "Encode a hash-table to a stream."
   (let ((*print-pretty* t)
-        (*print-level* nil)
         (*print-length* nil)
         (*print-lines* nil)
         (*print-right-margin* 72))
     (let ((keys (loop for key being each hash-keys in value collect key)))
-      (pprint-logical-block (*standard-output* keys :prefix "{" :suffix "}")
+      (pprint-logical-block (stream keys :prefix "{" :suffix "}")
         (pprint-exit-if-list-exhausted)
-        (loop (let ((key (pprint-pop)))
-                (if (not (stringp key))
-                    (progn
-                      (warn "~s is not a valid JSON key; skipping...~%" key)
-                      (pprint-exit-if-list-exhausted))
-                  (progn
-                    (json-encode-into key)
-                    (write-char #\:)
-                    (json-encode-into (gethash key value))
-                    (pprint-exit-if-list-exhausted)
-                    (write-char #\,)
-                    (pprint-newline :mandatory)
-                    (pprint-indent :current 0)))))))))
+        (loop
+           (let ((key (pprint-pop)))
+             (if (not (stringp key))
+                 (progn
+                   (warn "~s is not a valid JSON key; skipping...~%" key)
+                   (pprint-exit-if-list-exhausted))
+               (progn
+                 (json-write key stream)
+                 (write-char #\: stream)
+                 (json-write (gethash key value) stream)
+                 (pprint-exit-if-list-exhausted)
+                 (write-char #\, stream)
+                 (pprint-newline :mandatory)
+                 (pprint-indent :current 0)))))))))
 
 ;;; ----------------------------------------------------
 
-(defmethod json-encode-into ((value standard-object) &optional (*standard-output* *standard-output*))
-  "Encode any class with slots to a stream."
-  (let ((*print-pretty* t)
-        (*print-level* nil)
-        (*print-length* nil)
-        (*print-lines* nil)
-        (*print-right-margin* 72))
-    (flet ((bound (slot)
-             (slot-boundp value (slot-definition-name slot))))
-      (let ((bound-slots (remove-if-not #'bound (class-slots (class-of value)))))
-        (pprint-logical-block (*standard-output* bound-slots :prefix "{" :suffix "}")
-          (pprint-exit-if-list-exhausted)
-          (loop (let ((name (slot-definition-name (pprint-pop))))
-                  (json-encode-into name)
-                  (write-char #\:)
-                  (json-encode-into (when (slot-boundp value name) (slot-value value name)))
-                  (pprint-exit-if-list-exhausted)
-                  (write-char #\,)
-                  (pprint-newline :mandatory)
-                  (pprint-indent :current 0))))))))
-
-;;; ----------------------------------------------------
-
-(defmethod json-encode-into ((value json-object) &optional (*standard-output* *standard-output*))
+(defmethod json-write ((value json-object) &optional stream)
   "Encode a JSON object with an associative list of members to a stream."
   (let ((*print-pretty* t)
-        (*print-level* nil)
         (*print-length* nil)
         (*print-lines* nil)
         (*print-right-margin* 72))
-    (pprint-logical-block (*standard-output* (json-object-members value) :prefix "{" :suffix "}")
+    (pprint-logical-block (stream (json-object-members value)
+                                  :prefix "{"
+                                  :suffix "}")
       (pprint-exit-if-list-exhausted)
-      (loop (let ((kv-pair (pprint-pop)))
-              (destructuring-bind (k v)
-                  kv-pair
-                (if (not (stringp k))
-                    (progn
-                      (warn "~s is not a valid JSON key; skipping...~%" k)
-                      (pprint-exit-if-list-exhausted))
-                  (progn
-                    (json-encode-into k)
-                    (write-char #\:)
-                    (json-encode-into v)
-                    (pprint-exit-if-list-exhausted)
-                    (write-char #\,)
-                    (pprint-newline :mandatory)
-                    (pprint-indent :current 0)))))))))
+      (loop
+         (let ((kv-pair (pprint-pop)))
+           (destructuring-bind (k v)
+               kv-pair
+             (if (not (stringp k))
+                 (progn
+                   (warn "~s is not a valid JSON key; skipping...~%" k)
+                   (pprint-exit-if-list-exhausted))
+               (progn
+                 (json-write k stream)
+                 (write-char #\: stream)
+                 (json-write v stream)
+                 (pprint-exit-if-list-exhausted)
+                 (write-char #\, stream)
+                 (pprint-newline :mandatory)
+                 (pprint-indent :current 0)))))))))
