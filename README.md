@@ -1,4 +1,4 @@
-# JSON for LispWorks
+# JSON for Common Lisp
 
 The `json` package is a dead-simple [JSON](http://www.json.org) parser for Common Lisp. It makes heavy use of my [`re`](http://github.com/massung/re), [`lexer`](http://github.com/massung/lexer), and [`parse`](http://github.com/massung/parse) packages. So to understand the code you should start there. But they are really is simple.
 
