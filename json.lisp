@@ -74,7 +74,7 @@
 
 ;;; ----------------------------------------------------
 
-(deflexer json-lexer (s)
+(define-lexer json-lexer (s)
   ("[%s%n]+" :next-token)
   ("{"       :object)
   ("}"       :end-object)
@@ -100,7 +100,7 @@
 
 ;;; ----------------------------------------------------
 
-(deflexer string-lexer (s)
+(define-lexer string-lexer (s)
   ("\""            (pop-lexer s :end-string))
 
   ;; escaped characters
@@ -123,7 +123,7 @@
 
 ;;; ----------------------------------------------------
 
-(defparser json-value
+(define-parser json-value
   "Parse a single JSON value."
   (.one-of 'json-constant
            'json-string
@@ -132,13 +132,13 @@
 
 ;;; ----------------------------------------------------
 
-(defparser json-constant
+(define-parser json-constant
   "Parse a literal JSON value."
   (.is :constant))
 
 ;;; ----------------------------------------------------
 
-(defparser json-string
+(define-parser json-string
   "Parse a quoted string."
   (>>= (>> (.is :string) (.many-until (.is :chars) (.is :end-string)))
        (lambda (cs)
@@ -146,19 +146,19 @@
 
 ;;; ----------------------------------------------------
 
-(defparser json-array
+(define-parser json-array
   "Parse a list of values."
   (.between (.is :array) (.is :end-array) 'json-values))
 
 ;;; ----------------------------------------------------
 
-(defparser json-values
+(define-parser json-values
   "Parse values separated by commas."
   (.sep-by 'json-value (.is :comma)))
 
 ;;; ----------------------------------------------------
 
-(defparser json-object
+(define-parser json-object
   "Parse a set of key/value pairs."
   (>>= (.between (.is :object) (.is :end-object) 'json-members)
        (lambda (ms)
@@ -166,13 +166,13 @@
 
 ;;; ----------------------------------------------------
 
-(defparser json-members
+(define-parser json-members
   "Key/value pairs separated by commas."
   (.sep-by 'json-kv-pair (.is :comma)))
 
 ;;; ----------------------------------------------------
 
-(defparser json-kv-pair
+(define-parser json-kv-pair
   "A single key value pair."
   (>>= 'json-string
        (lambda (k)
