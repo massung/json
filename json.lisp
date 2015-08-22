@@ -101,7 +101,7 @@
 ;;; ----------------------------------------------------
 
 (define-lexer string-lexer (s)
-  ("\""            (pop-lexer s :end-string))
+  ("\""            (pop-lexer s :string))
 
   ;; escaped characters
   ("\\n"           (values :chars #\newline))
@@ -125,10 +125,10 @@
 
 (define-parser json-value
   "Parse a single JSON value."
-  (.one-of 'json-constant
-           'json-string
-           'json-array
-           'json-object))
+  (.or  'json-constant
+        'json-string
+        'json-array
+        'json-object))
 
 ;;; ----------------------------------------------------
 
@@ -140,9 +140,8 @@
 
 (define-parser json-string
   "Parse a quoted string."
-  (>>= (>> (.is :string) (.many-until (.is :chars) (.is :end-string)))
-       (lambda (cs)
-         (.ret (format nil "~{~a~}" cs)))))
+  (.let (cs (.do (.is :string) (.many-until (.is :chars) (.is :string))))
+    (.ret (format nil "~{~a~}" cs))))
 
 ;;; ----------------------------------------------------
 
@@ -160,9 +159,8 @@
 
 (define-parser json-object
   "Parse a set of key/value pairs."
-  (>>= (.between (.is :object) (.is :end-object) 'json-members)
-       (lambda (ms)
-         (.ret (make-instance 'json-object :members ms)))))
+  (.let (ms (.between (.is :object) (.is :end-object) 'json-members))
+    (.ret (make-instance 'json-object :members ms))))
 
 ;;; ----------------------------------------------------
 
@@ -174,11 +172,9 @@
 
 (define-parser json-kv-pair
   "A single key value pair."
-  (>>= 'json-string
-       (lambda (k)
-         (>>= (>> (.is :key) 'json-value)
-              (lambda (v)
-                (.ret (list k v)))))))
+  (.let* ((k 'json-string)
+          (v (.do (.is :key) 'json-value)))
+    (.ret (list k v))))
 
 ;;; ----------------------------------------------------
 
