@@ -140,7 +140,7 @@
 
 (define-parser json-string
   "Parse a quoted string."
-  (.let (cs (.do (.is :string) (.many-until (.is :chars) (.is :string))))
+  (.let (cs (.between (.is :string) (.is :string) (.many (.is :chars))))
     (.ret (format nil "~{~a~}" cs))))
 
 ;;; ----------------------------------------------------
