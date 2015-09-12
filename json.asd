@@ -8,7 +8,7 @@
   :version "1.0"
   :author "Jeffrey Massung"
   :license "Apache 2.0"
-  :description "JSON encoding and decoding for LispWorks."
+  :description "JSON encoding and decoding for Common Lisp."
   :serial t
   :components ((:file "json")
                (:file "encode"))
