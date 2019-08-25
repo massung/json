@@ -11,5 +11,5 @@
   :description "JSON encoding and decoding for Common Lisp."
   :serial t
   :components ((:file "json")
-               (:file "encode"))
-  :depends-on ("lexer"))
+               (:file "decode")
+               (:file "encode")))
