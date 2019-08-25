@@ -18,10 +18,13 @@
 ;;;;
 
 (defpackage :json
-  (:use :cl :re :lexer :parse)
+  (:use :cl)
   (:export
    #:json-decode
    #:json-encode
+
+   ;; decode from a stream
+   #:json-read
 
    ;; parsed json objects
    #:json-object
@@ -74,115 +77,11 @@
 
 ;;; ----------------------------------------------------
 
-(define-lexer json-lexer (s)
-  ("[%s%n]+" :next-token)
-  ("{"       :object)
-  ("}"       :end-object)
-  ("%["      :array)
-  ("%]"      :end-array)
-  (":"       :key)
-  (","       :comma)
-
-  ;; strings use a different lexer
-  ("\""      (push-lexer s #'string-lexer :string))
-
-  ;; numeric constants
-  ("[+-]?%d+(?%.%d+)?(?e[+-]?%d+)?"
-   (values :constant (read-from-string $$)))
-
-  ;; identifier constants
-  ("%a%w*"   (cond ((string= $$ "true")  (values :constant t))
-                   ((string= $$ "false") (values :constant nil))
-                   ((string= $$ "null")  (values :constant nil))
-
-                   ;; all other identifiers are invalid
-                   (t (error "Unknown JSON identifier ~s" $$)))))
-
-;;; ----------------------------------------------------
-
-(define-lexer string-lexer (s)
-  ("\""            (pop-lexer s :string))
-
-  ;; escaped characters
-  ("\\n"           (values :chars #\newline))
-  ("\\t"           (values :chars #\tab))
-  ("\\f"           (values :chars #\formfeed))
-  ("\\b"           (values :chars #\backspace))
-  ("\\r"           (values :chars #\return))
-
-  ;; unicode characters
-  ("\\u(%x%x%x%x)" (let ((n (parse-integer $1 :radix 16)))
-                     (values :chars (code-char n))))
-
-  ;; all other characters
-  ("\\(.)"         (values :chars $1))
-  ("[^\\\"]+"      (values :chars $$))
-
-  ;; don't reach the end of file or line
-  ("$"             (error "Unterminated string")))
-
-;;; ----------------------------------------------------
-
-(define-parser json-value
-  "Parse a single JSON value."
-  (.or  'json-constant
-        'json-string
-        'json-array
-        'json-object))
-
-;;; ----------------------------------------------------
-
-(define-parser json-constant
-  "Parse a literal JSON value."
-  (.is :constant))
-
-;;; ----------------------------------------------------
-
-(define-parser json-string
-  "Parse a quoted string."
-  (.let (cs (.between (.is :string) (.is :string) (.many (.is :chars))))
-    (.ret (format nil "~{~a~}" cs))))
-
-;;; ----------------------------------------------------
-
-(define-parser json-array
-  "Parse a list of values."
-  (.between (.is :array) (.is :end-array) 'json-values))
-
-;;; ----------------------------------------------------
-
-(define-parser json-values
-  "Parse values separated by commas."
-  (.sep-by 'json-value (.is :comma)))
-
-;;; ----------------------------------------------------
-
-(define-parser json-object
-  "Parse a set of key/value pairs."
-  (.let (ms (.between (.is :object) (.is :end-object) 'json-members))
-    (.ret (make-instance 'json-object :members ms))))
-
-;;; ----------------------------------------------------
-
-(define-parser json-members
-  "Key/value pairs separated by commas."
-  (.sep-by 'json-kv-pair (.is :comma)))
-
-;;; ----------------------------------------------------
-
-(define-parser json-kv-pair
-  "A single key value pair."
-  (.let* ((k 'json-string)
-          (v (.do (.is :key) 'json-value)))
-    (.ret (list k v))))
-
-;;; ----------------------------------------------------
-
-(defun json-decode (string &optional source)
+(defun json-decode (string &key (start 0) end)
   "Convert a JSON string into a Lisp object."
-  (with-lexer (lexer 'json-lexer string :source source)
-    (with-token-reader (next-token lexer)
-      (parse 'json-value next-token))))
+  (with-input-from-string (stream string :start start :end end)
+    (values (json-read stream)
+            (file-position stream))))
 
 ;;; ----------------------------------------------------
 

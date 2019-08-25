@@ -1,24 +1,29 @@
 # JSON for Common Lisp
 
-The `json` package is a dead-simple [JSON](http://www.json.org) parser for Common Lisp. It makes heavy use of my [`re`](http://github.com/massung/re), [`lexer`](http://github.com/massung/lexer), and [`parse`](http://github.com/massung/parse) packages. So to understand the code you should start there. But they are really is simple.
+The `json` package is a dead-simple [JSON](http://www.json.org) parser for Common Lisp.
+
+It is very quick and I personally use it to parse extremely large, genomics JSON-list files (several GB in size).
 
 ## Quickstart
 
 Most of the time, you'll be interfacing with two functions:
 
-    (json-decode string &optional source)
+    (json-decode string &key start end)
     (json-encode value &optional stream)
 
-Using `json-decode`, you can parse a string into a Lisp value.
+Using `json-decode`, you can parse a string into a Lisp value. It returns two values: the decoded value and the position within the string at which decoding stopped.
 
     CL-USER > (json-decode "10")
     10
+    2
 
     CL-USER > (json-decode "[\"Hello, world!\", 2, true, false]")
     ("Hello, world!" 2 T NIL)
+    33
 
     CL-USER > (json-decode "{ \"foo\" : \"bar\" }")
     #<JSON-OBJECT {"foo":"bar"}>
+    17
 
 Similarly, you can encode a Lisp value into JSON.
 
@@ -26,9 +31,27 @@ Similarly, you can encode a Lisp value into JSON.
     [1,2,"ABC",0.5,"hello"]
     NIL
 
-Many more types [of Lisp objects] are supported for encoding than are for decoding. When decoding, all JSON values are assumed to be string, numbers, lists (arrays), T, nil, or a JSON object. As you can see from above, the symbol `abc` was coerced to a string before being encoded.
+Many more Lisp types are supported for encoding than decoding. When decoding, all JSON values are assumed to be string, numbers, lists (arrays), T, nil, or a `json-object`. As you can see from above, the symbol `abc` was coerced to a string before being encoded.
+
+Similarly, when decoding, it is not possible to distinguish between `false`, `null`, or `[]`. And, I have personally never found this to be problematic.
 
 All characters, pathnames, and symbols are coerced to strings. All real numeric types are acceptable. All sequences (that aren't strings) are coerced to JSON arrays. Hash tables and `json-object` instances are written out as JSON objects.
+
+## Reading JSON from a Stream
+
+The `json-decode` function is actually just a wrapper around `json-read`, which reads a Lisp value from a JSON input stream. It can be quite useful to use `json-read` to parse without first reading into a string or when decoding multiple JSON values from the same input (e.g. a JSON-list file).
+
+    CL-USER > (with-input-from-string (s "10 true 30")
+                (print (json-read s))
+                (print (json-read s))
+                (print (json-read s)))
+    10
+    T
+    30
+
+The `json-read` function - like all read functions - allows for optional signalling of end of file errors and EOF values:
+
+    (json-read stream &optional eof-error-p eof-value)
 
 ## Accessing JSON-OBJECTs
 
