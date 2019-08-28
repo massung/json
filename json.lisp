@@ -26,6 +26,9 @@
    ;; decode from a stream
    #:json-read
 
+   ;; enable json-object-reader macro
+   #:json-enable-reader-macro
+
    ;; parsed json objects
    #:json-object
    #:json-object-members
@@ -94,7 +97,8 @@
 
 ;;; ----------------------------------------------------
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
+(defun json-enable-reader-macro ()
+  "Set the #{ dispatch macro character for reading JSON objects."
   (flet ((json-object-reader (stream char n)
            (declare (ignorable char n))
            (let ((xs (read-delimited-list #\} stream t)))
