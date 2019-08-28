@@ -205,10 +205,9 @@
       (make-instance 'json-object)
     (loop
        for key = (json-read-string stream)
-
-       ;; get the `:` character and the value
-       for _ = (json-read-char stream #\: :skip-ws t)
-       for value = (json-read stream)
+       for value = (progn
+                     (json-read-char stream #\: :skip-ws t)
+                     (json-read stream))
 
        ;; build the associative list of members
        collect (list key value)

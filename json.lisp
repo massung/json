@@ -68,7 +68,10 @@
   (let ((place (assoc key (json-object-members object) :test 'string=)))
     (prog1 value
       (if (null place)
-          (push (list key value) (json-object-members object))
+          (let ((k (if (stringp key)
+                       key
+                     (princ-to-string key))))
+            (push (list k value) (json-object-members object)))
         (rplacd place (list value))))))
 
 ;;; ----------------------------------------------------
@@ -88,3 +91,22 @@
 (defun json-encode (value &optional stream)
   "Encodes a Lisp value into a stream."
   (json-write value stream))
+
+;;; ----------------------------------------------------
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (flet ((json-object-reader (stream char n)
+           (declare (ignorable char n))
+           (let ((xs (read-delimited-list #\} stream t)))
+             (loop
+                for key = (pop xs)
+                for value = (pop xs)
+
+                ;; stop when nothing is left
+                unless (or key value)
+                return (make-instance 'json-object :members pairs)
+
+                ;; build associative list of key/value pairs
+                collect (list (princ-to-string key) value) into pairs))))
+    (set-dispatch-macro-character #\# #\{ #'json-object-reader)
+    (set-macro-character #\} (get-macro-character #\) nil))))
