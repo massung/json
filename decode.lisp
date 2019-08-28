@@ -42,6 +42,7 @@
 
 (defun json-read-char (stream expected &key skip-ws)
   "Read the next, expected character in the stream."
+  (declare (optimize (speed 3) (debug 0)))
   (if (json-peek-char stream expected :skip-ws skip-ws)
       t
     (error "JSON error: unexpected ~s" (read-char stream))))
@@ -50,6 +51,7 @@
 
 (defun json-peek-char (stream expected &key skip-ws)
   "Peek at the next character or token and optionally error if unexpected."
+  (declare (optimize (speed 3) (debug 0)))
   (when (equal (peek-char skip-ws stream) expected)
     (read-char stream)))
 
@@ -87,6 +89,7 @@
 
 (defun json-read-number (stream)
   "Read a number from a JSON stream."
+  (declare (optimize (speed 3) (debug 0)))
   (let ((s (with-output-to-string (s)
              (when (equal (peek-char t stream) #\-)
                (write-char (read-char stream) s))
@@ -139,6 +142,9 @@
 
 (defun json-read-string (stream)
   "Read a string from a JSON stream."
+  (declare (optimize (speed 3) (debug 0)))
+
+  ;; read the expected quote
   (json-read-char stream #\" :skip-ws t)
 
   ;; read into an output buffer
@@ -177,6 +183,9 @@
 
 (defun json-read-list (stream)
   "Read a list of JSON values."
+  (declare (optimize (speed 3) (debug 0)))
+
+  ;; read the expected open bracket
   (json-read-char stream #\[ :skip-ws t)
 
   ;; check for an empty list
@@ -198,6 +207,9 @@
 
 (defun json-read-object (stream)
   "Read an associative list of key/value pairs into a JSON object."
+  (declare (optimize (speed 3) (debug 0)))
+
+  ;; read the expected open brace
   (json-read-char stream #\{ :skip-ws t)
 
   ;; check for an empty object
