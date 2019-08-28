@@ -107,10 +107,11 @@
                 for value = (pop xs)
 
                 ;; stop when nothing is left
-                unless (or key value)
+                unless (or xs key value)
                 return (make-instance 'json-object :members pairs)
 
                 ;; build associative list of key/value pairs
-                collect (list (princ-to-string key) value) into pairs))))
+                collect (list (princ-to-string key) value)
+                into pairs))))
     (set-dispatch-macro-character #\# #\{ #'json-object-reader)
     (set-macro-character #\} (get-macro-character #\) nil))))

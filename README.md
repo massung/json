@@ -74,4 +74,14 @@ While you can call `json-setf` yourself, `json-getf` is setf-able, and does the 
     CL-USER > **
     #<JSON-OBJECT {"hello":"world","foo":"FOOBAR"}>
 
+## JSON Reader Macro
+
+There is also a reader macro that can be enabled, which allows for easy, literal creation of JSON objects:
+
+    CL-USER > (json-enable-reader-macro)
+    T
+
+    CL-USER > #{:foo 10 :bar "Hello, world!"}
+    #<JSON-OBJECT {"FOO":10,"BAR":"Hello, world!"}>
+
 That's it!
