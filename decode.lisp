@@ -131,8 +131,10 @@
                           ;; exponent
                           (read-digits))))
 
-               ;; read each component
-               (read-digits)
+               ;; read each component; numbers beginning with 0 are a special case
+               (if (equalp (peek-char nil stream) #\0)
+                   (write-char (read-char stream) s)
+                 (read-digits))
                (read-fraction)
                (read-exponent)))))
     (prog1
