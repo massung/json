@@ -85,3 +85,7 @@ There is also a reader macro that can be enabled, which allows for easy, literal
     #<JSON-OBJECT {"FOO":10,"BAR":"Hello, world!"}>
 
 That's it!
+
+## Special Thanks
+
+A big "thank you" here goes to Kaveh Yousefi for finding a bug and providing the fix!
